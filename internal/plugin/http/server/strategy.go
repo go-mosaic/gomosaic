@@ -24,4 +24,5 @@ type Strategy interface {
 	SetHeader(k, v jen.Code) jen.Code
 	UsePathParams() bool
 	WriteBody(data, statusCode jen.Code) jen.Code
+	PathParamWrap(paramName string) string
 }

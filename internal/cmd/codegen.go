@@ -61,11 +61,19 @@ func CodegenCmd(postRun ...func()) *cobra.Command {
 					return
 				}
 
-				var dir string
 				if modfile != "" {
-					dir = filepath.Dir(modfile)
-				} else {
+					modfile, err = filepath.Abs(modfile)
+					if err != nil {
+						cmd.Println(err)
+						return
+					}
+				}
+
+				var dir string
+				if modfile == "" {
 					dir = filepath.Dir(os.Args[0])
+				} else {
+					dir = filepath.Dir(modfile)
 				}
 
 				moduleInfo, err := gomosaic.LoadModuleInfo(modfile)

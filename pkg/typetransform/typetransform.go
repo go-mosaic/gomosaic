@@ -99,11 +99,11 @@ func (tr *Transform) parse(typeInfo *gomosaic.TypeInfo) (code jen.Code) {
 		}
 	}
 
-	if typeInfo.Named != nil && typeInfo.Named.IsBasic {
-		if typeInfo.Named.BasicInfo == gomosaic.IsString {
-			return jen.Add(tr.assignID).Op("=").Do(tr.qualFn(typeInfo.Named.Package, typeInfo.Named.Name)).Call(tr.valueID)
+	if typeInfo.IsNamed && typeInfo.ElemType.IsBasic {
+		if typeInfo.ElemType.BasicInfo == gomosaic.IsString {
+			return jen.Add(tr.assignID).Op("=").Do(tr.qualFn(typeInfo.ElemType.Package, typeInfo.ElemType.Name)).Call(tr.valueID)
 		}
-		return For(typeInfo.Named).
+		return For(typeInfo.ElemType).
 			SetAssignID(tr.assignID).
 			SetValueID(tr.valueID).
 			SetQualFunc(tr.qualFn).

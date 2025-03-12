@@ -351,6 +351,9 @@ func parseValue(t reflect.Type, s string) (any, error) {
 		return s, nil
 	case reflect.Bool:
 		var b bool
+		if s == "" {
+			return false, nil
+		}
 		return b, runtime.ParseBool(s, &b)
 	}
 }

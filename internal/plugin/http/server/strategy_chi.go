@@ -83,6 +83,10 @@ func (s *StrategyChi) HandlerFunc(method string, pattern string, middlewares jen
 	)
 }
 
+func (*StrategyChi) PathParamWrap(paramName string) string {
+	return "{" + paramName + "}"
+}
+
 func (*StrategyChi) MiddlewareType() jen.Code {
 	return jen.Func().Params(jen.Qual(service.HTTPPkg, "Handler")).Qual(service.HTTPPkg, "Handler")
 }

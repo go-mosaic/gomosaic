@@ -100,11 +100,12 @@ type MethodResultOpt struct {
 }
 
 type IfaceOpt struct {
-	NameTypeInfo *gomosaic.NameTypeInfo
-	Errors       []ErrorOpt `option:"error,inline"`
-	ErrorText    string     `option:"error-text"`
-	Example      string     `option:"example" valid:"in,params:'http curl'"`
-	Methods      []*MethodOpt
+	NameTypeInfo       *gomosaic.NameTypeInfo
+	Errors             []ErrorOpt `option:"error,inline"`
+	ErrorText          string     `option:"error-text"`
+	Example            string     `option:"example" valid:"in,params:'http curl'"`
+	DefaultContentType string     `option:"default-content-type"`
+	Methods            []*MethodOpt
 }
 
 func ServiceLoad(prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {

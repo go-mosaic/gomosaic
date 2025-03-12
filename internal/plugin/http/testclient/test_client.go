@@ -56,15 +56,15 @@ func (g *ClientTestGenerator) typeToValue(typeInfo *gomosaic.TypeInfo) jen.Code 
 			c = jen.Id("ptr").Call(c)
 		}
 		return c
-	case typeInfo.Named != nil:
+	case typeInfo.IsNamed:
 		var s jen.Statement
 		if isPtr {
 			s.Op("&")
 		}
 
-		if typeInfo.Named.IsBasic {
+		if typeInfo.ElemType.IsBasic {
 			var value any
-			if typeInfo.Named.BasicInfo == gomosaic.IsString {
+			if typeInfo.ElemType.BasicInfo == gomosaic.IsString {
 				value = "1"
 			}
 
@@ -103,8 +103,8 @@ func (g *ClientTestGenerator) genServerResponseGenerate(cfg Config, methodOpt *s
 			serverResponse := methodOpt.BodyResults[0]
 
 			serverResponseTypeInfo := serverResponse.Var.Type
-			if serverResponseTypeInfo.Named != nil {
-				serverResponseTypeInfo = serverResponseTypeInfo.Named
+			if serverResponseTypeInfo.IsNamed {
+				serverResponseTypeInfo = serverResponseTypeInfo.ElemType
 			}
 
 			group.Var().Id("serverResponse").Add(jenutils.TypeInfoQual(serverResponse.Var.Type, g.qualFn)).Line()
@@ -136,8 +136,8 @@ func (g *ClientTestGenerator) genBodyParamsGenerate(methodOpt *service.MethodOpt
 
 		for _, p := range methodOpt.BodyParams {
 			typeInfo := p.Var.Type
-			if typeInfo.Named != nil {
-				typeInfo = p.Var.Type.Named
+			if typeInfo.IsNamed {
+				typeInfo = p.Var.Type.ElemType
 			}
 
 			if typeInfo.Struct != nil {
@@ -213,8 +213,8 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 
 					for _, p := range methodOpt.BodyParams {
 						typeInfo := p.Var.Type
-						if typeInfo.Named != nil {
-							typeInfo = typeInfo.Named
+						if typeInfo.IsNamed {
+							typeInfo = typeInfo.ElemType
 						}
 
 						switch {
@@ -393,15 +393,15 @@ func (g *ClientTestGenerator) genCheckBodyResult(methodOpt *service.MethodOpt, c
 		return jen.Null()
 	}
 	for _, r := range methodOpt.BodyResults {
-		if r.Var.Type.Named == nil {
+		if !r.Var.Type.IsNamed {
 			continue
 		}
 
-		if r.Var.Type.Named.Struct == nil {
+		if r.Var.Type.ElemType.Struct == nil {
 			continue
 		}
 
-		st := r.Var.Type.Named.Struct
+		st := r.Var.Type.ElemType.Struct
 
 		for _, f := range st.Fields {
 			for _, v := range flatten.Flatten(f) {

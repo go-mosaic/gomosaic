@@ -266,6 +266,13 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 
 			group.Id("req").Dot("Header").Dot("Set").Call(jen.Lit("Accept"), jen.Lit("application/json"))
 
+			group.If(jen.Id("r").Dot("opts").Dot("propagation").Op("!=").Nil()).Block(
+				jen.Id("r").Dot("opts").Dot("propagation").Dot("Inject").Call(
+					jen.Id("ctx"),
+					jen.Qual(service.OtelPropagationPkg, "HeaderCarrier").Call(jen.Id("req").Dot("Header")),
+				),
+			)
+
 			if len(methodOpt.BodyParams) > 0 {
 				group.Switch(jen.Id("r").Dot("opts").Dot("content")).BlockFunc(func(group *jen.Group) {
 					group.Default().Block(
@@ -279,7 +286,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 							group.Id("body").Op(":=").Qual(service.URLPkg, "Values").Values()
 
 							for _, p := range methodOpt.BodyParams {
-								if p.Var.IsContext {
+								if p.Var.IsContext || !p.Var.Type.IsBasic {
 									continue
 								}
 								paramID := jen.Id("r").Dot("params").Dot(strcase.ToLowerCamel(p.Var.Name))
@@ -308,7 +315,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 							group.Id("multipartWriter").Op(":=").Qual(service.MimeMultipartPkg, "NewWriter").Call(jen.Op("&").Id("body"))
 
 							for _, p := range methodOpt.BodyParams {
-								if p.Var.IsContext {
+								if p.Var.IsContext || !p.Var.Type.IsBasic {
 									continue
 								}
 								paramID := jen.Id("r").Dot("params").Dot(strcase.ToLowerCamel(p.Var.Name))
@@ -857,6 +864,7 @@ func (g *ClientGenerator) genTypes() jen.Code {
 		jen.Id("ctx").Qual("context", "Context"),
 		jen.Id("content").String(),
 		jen.Id("tracer").Qual(service.OtelTracePkg, "Tracer"),
+		jen.Id("propagator").Qual(service.OtelPropagationPkg, "TextMapPropagator"),
 		jen.Id("before").Index().Id("ClientBeforeFunc"),
 		jen.Id("after").Index().Id("ClientAfterFunc"),
 		jen.Id("client").Op("*").Qual(service.HTTPPkg, "Client"),
@@ -867,6 +875,12 @@ func (g *ClientGenerator) genTypes() jen.Code {
 	group.Func().Id("WithTracer").Params(jen.Id("tracer").Qual(service.OtelTracePkg, "Tracer")).Id("ClientOption").Block(
 		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
 			jen.Id("o").Dot("tracer").Op("=").Id("tracer"),
+		)),
+	)
+
+	group.Func().Id("WithPropagator").Params(jen.Id("propagator").Qual(service.OtelPropagationPkg, "TextMapPropagator")).Id("ClientOption").Block(
+		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
+			jen.Id("o").Dot("propagator").Op("=").Id("propagator"),
 		)),
 	)
 
@@ -882,13 +896,13 @@ func (g *ClientGenerator) genTypes() jen.Code {
 		)),
 	)
 
-	group.Func().Id("WithClient").Params(jen.Id("client").Op("*").Qual(service.HTTPPkg, "Client")).Id("ClientOption").Block(
+	group.Func().Id("WithHTTPClient").Params(jen.Id("client").Op("*").Qual(service.HTTPPkg, "Client")).Id("ClientOption").Block(
 		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
 			jen.Id("o").Dot("client").Op("=").Id("client"),
 		)),
 	)
 
-	group.Func().Id("WithPrometheusCollector").Params(jen.Id("c").Id("prometheusCollector")).Id("ClientOption").Block(
+	group.Func().Id("WithPromCollector").Params(jen.Id("c").Id("prometheusCollector")).Id("ClientOption").Block(
 		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
 			jen.If(jen.Id("o").Dot("client").Dot("Transport").Op("==").Nil()).Block(
 				jen.Panic(jen.Lit("no transport is set for the http client")),
@@ -1051,7 +1065,9 @@ func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, erro
 	group.Add(g.genTypes())
 
 	for _, s := range services {
-		group.Add(g.genErrorTypes(s))
+		if len(s.Errors) > 0 {
+			group.Add(g.genErrorTypes(s))
+		}
 		group.Add(g.genClientStruct(s))
 		group.Add(g.genClientConstruct(s))
 		group.Add(g.genClientEndpoints(s))

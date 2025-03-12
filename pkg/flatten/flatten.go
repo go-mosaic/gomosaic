@@ -49,8 +49,8 @@ type FlattenProcessor struct {
 }
 
 func (p *FlattenProcessor) varsByType(typeInfo *gomosaic.TypeInfo) (vars []*gomosaic.VarInfo) {
-	if typeInfo.Named != nil {
-		typeInfo = typeInfo.Named
+	if typeInfo.IsNamed {
+		typeInfo = typeInfo.ElemType
 	}
 	if typeInfo.Struct != nil {
 		vars = append(vars, typeInfo.Struct.Fields...)

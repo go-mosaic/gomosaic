@@ -28,51 +28,33 @@ func (g *ServerGenerator) genServiceOptions(services []*service.IfaceOpt) jen.Co
 	for _, s := range services {
 		middlewareType := g.strategy.MiddlewareType()
 		optionsName := s.NameTypeInfo.Name + "Options"
-		optionName := s.NameTypeInfo.Name + "Option"
-
-		group.Add(g.genTypeFuncOption(optionName, optionsName))
-		group.Add(g.genOptionMiddleware(s.NameTypeInfo.Name, optionsName, optionName, middlewareType))
-		group.Add(g.genTypeOption(optionsName, middlewareType, s.Methods))
-
-		for _, m := range s.Methods {
-			group.Add(g.genMethodMiddleware(optionsName, optionName, s.NameTypeInfo.Name, m.Func.Name, middlewareType))
-		}
+		group.Add(g.genTypeOptions(optionsName, middlewareType, s.Methods))
 	}
 
 	return group
 }
 
-func (g *ServerGenerator) genTypeFuncOption(optionName, optionsName string) jen.Code {
-	return jen.Type().Id(optionName).Func().Params(jen.Op("*").Id(optionsName))
-}
+func (g *ServerGenerator) genTypeOptions(optionsName string, middlewareType jen.Code, methods []*service.MethodOpt) jen.Code {
+	group := jen.NewFile("")
 
-func (g *ServerGenerator) genTypeOption(optionsName string, middlewareType jen.Code, methods []*service.MethodOpt) jen.Code {
-	return jen.Type().Id(optionsName).StructFunc(func(group *jen.Group) {
+	group.Type().Id(optionsName).StructFunc(func(group *jen.Group) {
 		group.Id("middleware").Index().Add(middlewareType)
-		for _, ep := range methods {
-			group.Id("middleware" + ep.Func.Name).Index().Add(middlewareType)
+		for _, m := range methods {
+			group.Id("middleware" + m.Func.Name).Index().Add(middlewareType)
 		}
 	})
-}
 
-func (g *ServerGenerator) genOptionMiddleware(ifaceName, optionsName, optionName string, middlewareType jen.Code) jen.Code {
-	return jen.Func().Id(ifaceName + "Middleware").Params(jen.Id("middleware").Op("...").Add(middlewareType)).Id(optionName).Block(
-		jen.Return(
-			jen.Func().Params(jen.Id("o").Op("*").Id(optionsName)).Block(
-				jen.Id("o").Dot("middleware").Op("=").Append(jen.Id("o").Dot("middleware"), jen.Id("middleware").Op("...")),
-			),
-		),
-	)
-}
+	group.Func().Params(jen.Id("o").Op("*").Id(optionsName)).Id("Middleware").Params(jen.Id("middleware").Op("...").Add(middlewareType)).Op("*").Id(optionsName).Block(
+		jen.Return(jen.Id("o")),
+	).Line()
 
-func (g *ServerGenerator) genMethodMiddleware(optionsName, optionName, ifaceName, methodName string, middlewareType jen.Code) jen.Code {
-	return jen.Func().Id(ifaceName + methodName + "Middleware").Params(jen.Id("middleware").Op("...").Add(middlewareType)).Id(optionName).Block(
-		jen.Return(
-			jen.Func().Params(jen.Id("o").Op("*").Id(optionsName)).Block(
-				jen.Id("o").Dot("middleware"+methodName).Op("=").Append(jen.Id("o").Dot("middleware"+methodName), jen.Id("middleware").Op("...")),
-			),
-		),
-	)
+	for _, m := range methods {
+		group.Func().Params(jen.Id("o").Op("*").Id(optionsName)).Id("Middleware" + m.Func.Name).Params(jen.Id("middleware").Op("...").Add(middlewareType)).Op("*").Id(optionsName).Block(
+			jen.Return(jen.Id("o")),
+		).Line()
+	}
+
+	return group
 }
 
 func (g *ServerGenerator) genOptionLoader(ifaceName string) jen.Code {
@@ -111,7 +93,7 @@ func (g *ServerGenerator) genNonBodyParamsfunc(methodOpt *service.MethodOpt, par
 
 		transformCodes = append(transformCodes, typetransform.For(p.Var.Type).
 			SetAssignID(jen.Id(name)).
-			SetValueID(valueFn(name)).
+			SetValueID(valueFn(strcase.ToLowerCamel(p.Name))).
 			SetErrStatements(
 				g.genErrorEncoderCall(methodOpt.Iface),
 				jen.Return(),
@@ -144,6 +126,10 @@ func (g *ServerGenerator) genHandlerDecodeBodyParams(
 	case "POST", "PUT", "PATCH", "DELETE":
 
 		group.Id(varContentType).Op(":=").Add(g.strategy.HeaderParamValue("content-type"))
+
+		group.If(jen.Id(varContentType).Op("==").Lit("")).Block(
+			jen.Id(varContentType).Op("=").Lit(opt.Iface.DefaultContentType),
+		)
 
 		group.Id("parts").Op(":=").Qual("strings", "Split").Call(jen.Id(varContentType), jen.Lit(";"))
 		group.If(jen.Len(jen.Id("parts")).Op(">").Lit(0)).Block(
@@ -237,16 +223,63 @@ func (g *ServerGenerator) genHandlerDecodeBodyParams(
 	return group
 }
 
+func (g *ServerGenerator) genCallServiceMethod(m *service.MethodOpt) jen.Code {
+	group := jen.NewFile("")
+
+	svcCall := jen.Do(func(s *jen.Statement) {
+		s.ListFunc(func(group *jen.Group) {
+			for _, r := range m.Results {
+				group.Id(strcase.ToLowerCamel(r.Var.Name))
+			}
+		})
+		if len(m.Results) > 0 {
+			s.Op(":=")
+		} else {
+			s.Op("=")
+		}
+	}).Id("svc").Dot(m.Func.Name).CallFunc(func(group *jen.Group) {
+		group.Add(g.strategy.Context())
+		for _, p := range m.Params {
+			if p.Var.IsContext {
+				continue
+			}
+			switch p.HTTPType {
+			default:
+				group.Id(strcase.ToLowerCamel(p.Var.Name))
+			case service.PathHTTPType, service.CookieHTTPType, service.QueryHTTPType:
+				group.Id("param" + strcase.ToCamel(p.Var.Name))
+			}
+		}
+	})
+
+	group.Add(svcCall)
+
+	group.If(jen.Err().Op("!=").Nil()).Block(
+		g.genErrorEncoderCall(m.Iface),
+		jen.Return(),
+	)
+
+	return group
+}
+
 func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
-	return jen.Func().Id(s.NameTypeInfo.Name+"RegisterHandlers").Params(
+	group := jen.NewFile("")
+
+	group.Func().Id(s.NameTypeInfo.Name+"RegisterHandlers").Params(
 		jen.Id(g.strategy.LibArgName()).Add(g.strategy.LibType()),
 		jen.Id("svc").Do(g.qualifier.Qual(s.NameTypeInfo.Package.Path, s.NameTypeInfo.Name)),
-		jen.Id("opts").Op("...").Id(s.NameTypeInfo.Name+"Option"),
+		jen.Id("opt").Op("*").Id(s.NameTypeInfo.Name+"Options"),
 	).BlockFunc(func(group *jen.Group) {
 		group.Add(g.genOptionLoader(s.NameTypeInfo.Name))
 		for _, m := range s.Methods {
 			middlewares := jen.Append(jen.Id("o").Dot("middleware"), jen.Id("o").Dot("middleware"+m.Func.Name).Op("...")).Op("...")
-			group.Add(g.strategy.HandlerFunc(m.Method, m.Path, middlewares, func(group *jen.Group) {
+
+			pathParts := strings.Split(m.Path, "/")
+			for _, pp := range m.PathParams {
+				pathParts[pp.PathParamIndex] = g.strategy.PathParamWrap(pp.PathParamName)
+			}
+
+			group.Add(g.strategy.HandlerFunc(m.Method, strings.Join(pathParts, "/"), middlewares, func(group *jen.Group) {
 				if len(m.Params) > 0 {
 					if len(m.BodyParams) > 0 {
 						group.Add(g.genHandlerDecodeBodyParams(m, m.BodyParams))
@@ -267,37 +300,7 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 					}
 				}
 
-				group.Do(func(s *jen.Statement) {
-					s.ListFunc(func(group *jen.Group) {
-						for _, r := range m.Results {
-							group.Id(strcase.ToLowerCamel(r.Var.Name))
-						}
-					})
-					if len(m.Results) > 0 {
-						s.Op(":=")
-					} else {
-						s.Op("=")
-					}
-				}).Id("svc").Dot(m.Func.Name).CallFunc(func(group *jen.Group) {
-					group.Add(g.strategy.Context())
-					for _, p := range m.Params {
-						if p.Var.IsContext {
-							continue
-						}
-						name := strcase.ToLowerCamel(p.Var.Name)
-						switch p.HTTPType {
-						default:
-							group.Id(name)
-						case service.PathHTTPType, service.CookieHTTPType, service.QueryHTTPType:
-							group.Id("param" + name)
-						}
-					}
-				})
-
-				group.If(jen.Err().Op("!=").Nil()).Block(
-					g.genErrorEncoderCall(s),
-					jen.Return(),
-				)
+				group.Add(g.genCallServiceMethod(m))
 
 				respName := "resp"
 
@@ -327,6 +330,8 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 			}))
 		}
 	})
+
+	return group
 }
 
 func (g *ServerGenerator) genBodyResultWrite(ifaceOpt *service.IfaceOpt, respName string) jen.Code {
@@ -444,11 +449,9 @@ func (g *ServerGenerator) genErrorEncoder(services []*service.IfaceOpt) jen.Code
 func (g *ServerGenerator) Generate(services []*service.IfaceOpt) (jen.Code, error) {
 	group := jen.NewFile("")
 	group.Add(g.genServiceOptions(services))
-
 	for _, s := range services {
 		group.Add(g.genRegisterHandlers(s))
 	}
-
 	group.Add(g.genErrorEncoder(services))
 
 	return group, nil

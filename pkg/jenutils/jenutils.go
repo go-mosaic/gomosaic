@@ -1,6 +1,8 @@
 package jenutils
 
 import (
+	"fmt"
+
 	"github.com/dave/jennifer/jen"
 
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
@@ -27,12 +29,24 @@ func ZeroValue(typeInfo *gomosaic.TypeInfo, qualFunc QualFunc) jen.Code {
 
 func TypeInfoQual(typeInfo *gomosaic.TypeInfo, qual QualFunc) (s *jen.Statement) {
 	s = new(jen.Statement)
-	packagePath, name := typeInfo.Package, typeInfo.Name
-	if typeInfo.IsPtr {
-		s.Op("*")
-		packagePath, name = typeInfo.ElemType.Package, typeInfo.ElemType.Name
+	switch {
+	case typeInfo.IsBasic:
+		s.Id(typeInfo.Name)
+		return s
+	case typeInfo.IsAlias:
+		s.Id(typeInfo.Name)
+		return s
+	case typeInfo.IsPtr:
+		s.Op("*").Add(TypeInfoQual(typeInfo.ElemType, qual))
+		return s
+	case typeInfo.IsMap:
+		s.Map(TypeInfoQual(typeInfo.KeyType, qual)).Add(TypeInfoQual(typeInfo.ElemType, qual))
+		return s
+	case typeInfo.IsNamed:
+
+		s.Do(qual(typeInfo.Package, typeInfo.Name))
+		return s
 	}
 
-	s.Do(qual(packagePath, name))
-	return s
+	panic(fmt.Sprintf("unknown TypeInfo: %+v", *typeInfo))
 }

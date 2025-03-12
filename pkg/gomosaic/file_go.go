@@ -25,6 +25,8 @@ type goFileOpts struct {
 
 type GoFile struct {
 	*jen.File
+
+	packagePath string
 }
 
 func (f *GoFile) Render(w io.Writer, version string) error {
@@ -37,32 +39,37 @@ func (f *GoFile) Render(w io.Writer, version string) error {
 	return nil
 }
 
-// func (f *GoFile) isCurrPkg(pkgPath string) bool {
-// 	return strings.EqualFold(f.pkgPath, pkgPath)
-// }
+func (f *GoFile) isCurrPkg(pkgPath string) bool {
+	return strings.EqualFold(f.packagePath, pkgPath)
+}
 
 func (f *GoFile) Qual(pkgPath, name string) func(s *jen.Statement) {
 	return func(s *jen.Statement) {
-		// if f.isCurrPkg(pkgPath) {
-		// s.Id(name)
-		// } else {
-		s.Qual(pkgPath, name)
-		// }
+		if f.isCurrPkg(pkgPath) {
+			s.Id(name)
+		} else {
+			s.Qual(pkgPath, name)
+		}
 	}
 }
 
-func NewGoFile(outputDir string, opts ...GoFileOption) *GoFile {
+func NewGoFile(module *ModuleInfo, outputDir string, opts ...GoFileOption) *GoFile {
 	o := &goFileOpts{}
 	for _, optApply := range opts {
 		optApply(o)
 	}
 
+	packagePath := strings.Replace(outputDir, module.Dir, "", -1)
+	packagePath = filepath.Join(module.Path, strings.TrimLeft(packagePath, string(os.PathSeparator)))
+
 	packageName := guessAlias(filepath.Base(outputDir))
 	if o.useTestPkg {
+		packagePath += "/_test"
 		packageName += "_test"
 	}
 
 	return &GoFile{
-		File: jen.NewFile(packageName),
+		File:        jen.NewFile(packageName),
+		packagePath: packagePath,
 	}
 }

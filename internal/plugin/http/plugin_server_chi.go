@@ -23,7 +23,7 @@ func (p *PluginServerChi) Generate(ctx context.Context, module *gomosaic.ModuleI
 		return nil, err
 	}
 
-	f := gomosaic.NewGoFile(outputDir)
+	f := gomosaic.NewGoFile(module, outputDir)
 
 	serverGen := server.NewServer(new(server.StrategyChi), f)
 	code, err := serverGen.Generate(services)

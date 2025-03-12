@@ -90,6 +90,10 @@ func (s *StrategyEcho) HandlerFunc(method string, pattern string, middlewares je
 	)
 }
 
+func (*StrategyEcho) PathParamWrap(paramName string) string {
+	return "{" + paramName + "}"
+}
+
 func (s *StrategyEcho) SetHeader(k jen.Code, v jen.Code) (typ jen.Code) {
 	return jen.Id(s.RespArgName()).Dot("Response").Call().Dot("Header").Call().Dot("Add").Call(k, v)
 }

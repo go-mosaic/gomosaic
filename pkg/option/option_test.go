@@ -1,7 +1,6 @@
 package option
 
 import (
-	"fmt"
 	"go/token"
 	"testing"
 
@@ -107,7 +106,6 @@ func TestUnmarshal(t *testing.T) {
 			if err := Unmarshal(tt.args.prefix, tags, tt.args.v); (err != nil) != tt.wantErr {
 				t.Errorf("Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
 			}
-			fmt.Println(tt.args.v)
 		})
 	}
 }

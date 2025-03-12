@@ -116,7 +116,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/gomosaic",
             "args": [
-                "generate",                
+                "codegen",                
                 "--type", "ProfileController", 
                 "--modfile", "/Users/vitaly/Documents/work/gomosaic/examples/rest-service-chi/go.mod",
                 "test", 
@@ -132,7 +132,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/gomosaic",
             "args": [
-                "generate",                
+                "codegen",                
                 "--modfile", "/Users/vitaly/Documents/work/gomosaic/examples/rest-service-chi/go.mod",
                 "http-server-chi", 
                 "./internal/usecase/controller/...",
@@ -148,7 +148,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/gomosaic",
             "args": [
-                "generate",                
+                "codegen",                
                 "--modfile", "/Users/vitaly/Documents/work/gomosaic/examples/rest-service-echo/go.mod",
                 "http-server-echo", 
                 "./internal/usecase/controller/...",
@@ -164,7 +164,7 @@
             "mode": "auto",
             "program": "${workspaceFolder}/cmd/gomosaic",
             "args": [
-                "generate",                
+                "codegen",                
                 "--modfile", "/Users/vitaly/Documents/work/gomosaic/examples/rest-service-chi/go.mod",
                 "http-client", 
                 "./internal/usecase/controller/...",

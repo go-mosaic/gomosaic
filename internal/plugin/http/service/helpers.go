@@ -17,24 +17,26 @@ const (
 	JSONPkg          = "encoding/json"
 	ContextPkg       = "context"
 	FmtPkg           = "fmt"
+	SyncPkg          = "sync"
 	IOPkg            = "io"
 	NetPkg           = "net"
 	TLSPkg           = "crypto/tls"
 	StrconvPkg       = "strconv"
 	MimeMultipartPkg = "mime/multipart"
 
-	PrometheusPkg    = "github.com/prometheus/client_golang/prometheus"
-	PromautoPkg      = "github.com/prometheus/client_golang/prometheus/promauto"
-	PromHTTPPkg      = "github.com/prometheus/client_golang/prometheus/promhttp"
-	CleanHTTPPkg     = "github.com/hashicorp/go-cleanhttp"
-	ChiPkg           = "github.com/go-chi/chi/v5"
-	JSONRPCPkg       = "github.com/555f/jsonrpc"
-	EchoPkg          = "github.com/labstack/echo/v4"
-	NullPkg          = "gopkg.in/guregu/null.v4"
-	MimeheaderPkg    = "github.com/aohorodnyk/mimeheader"
-	OtelTracePkg     = "go.opentelemetry.io/otel/trace"
-	OtelTraceAttrPkg = "go.opentelemetry.io/otel/attribute"
-	OtelCodesPkg     = "go.opentelemetry.io/otel/codes"
+	PrometheusPkg      = "github.com/prometheus/client_golang/prometheus"
+	PromautoPkg        = "github.com/prometheus/client_golang/prometheus/promauto"
+	PromHTTPPkg        = "github.com/prometheus/client_golang/prometheus/promhttp"
+	CleanHTTPPkg       = "github.com/hashicorp/go-cleanhttp"
+	ChiPkg             = "github.com/go-chi/chi/v5"
+	JSONRPCPkg         = "github.com/555f/jsonrpc"
+	EchoPkg            = "github.com/labstack/echo/v4"
+	NullPkg            = "gopkg.in/guregu/null.v4"
+	MimeheaderPkg      = "github.com/aohorodnyk/mimeheader"
+	OtelTracePkg       = "go.opentelemetry.io/otel/trace"
+	OtelTraceAttrPkg   = "go.opentelemetry.io/otel/attribute"
+	OtelCodesPkg       = "go.opentelemetry.io/otel/codes"
+	OtelPropagationPkg = "go.opentelemetry.io/otel/propagation"
 )
 
 const paramNameDefaultFormatter = "lowerCamel"
@@ -108,7 +110,11 @@ func IsObjectType(typeInfo *gomosaic.TypeInfo) (ok bool) {
 		typeInfo = typeInfo.ElemType
 	}
 
-	return typeInfo.Named != nil || typeInfo.Struct != nil || typeInfo.Interface != nil
+	if typeInfo.IsNamed {
+		typeInfo = typeInfo.ElemType
+	}
+
+	return typeInfo.Struct != nil || typeInfo.Interface != nil
 }
 
 func MakeEmptyResults(results []*MethodResultOpt, qualFunc jenutils.QualFunc, addinCodes ...jen.Code) (codes []jen.Code) {

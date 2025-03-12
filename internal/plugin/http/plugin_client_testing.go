@@ -23,7 +23,7 @@ func (p *PluginClientTesting) Generate(ctx context.Context, module *gomosaic.Mod
 		return nil, err
 	}
 
-	f := gomosaic.NewGoFile(outputDir, gomosaic.UseTestPkg())
+	f := gomosaic.NewGoFile(module, outputDir, gomosaic.UseTestPkg())
 
 	fake := faker.New()
 

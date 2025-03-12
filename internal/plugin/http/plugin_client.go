@@ -23,7 +23,7 @@ func (p *PluginClient) Generate(ctx context.Context, module *gomosaic.ModuleInfo
 		return nil, err
 	}
 
-	f := gomosaic.NewGoFile(outputDir)
+	f := gomosaic.NewGoFile(module, outputDir)
 
 	clientGen := client.NewClientGenerator(f)
 	code, err := clientGen.Generate(services)

@@ -87,15 +87,16 @@ type TypeInfo struct {
 	IsBasic   bool           // Является ли тип базовым
 	BasicInfo BasicInfo      // вид базового типа.
 	BasicKind BasicKind      // свойства базового типа.
+	IsAlias   bool           // Является ли тип алиасом.
 	IsPtr     bool           // Является ли тип указателем.
 	IsSlice   bool           // Является ли тип слайсом.
 	IsArray   bool           // Является ли тип массивом.
 	ArrayLen  int            // Длина массива (если IsArray == true).
 	IsMap     bool           // Является ли тип мапой.
 	IsChan    bool           // Является ли тип каналом.
+	IsNamed   bool           // Является ли тип именованным (например type Name <тип>).
 	KeyType   *TypeInfo      // Тип ключа (если IsMap == true, может быть nil).
-	ElemType  *TypeInfo      // Тип элемента (для каналов, слайсов, массивов, мап и указателей, может быть nil).
-	Named     *TypeInfo      // Тип является именованым (например type Name <тип>, может быть nil).
+	ElemType  *TypeInfo      // Тип элемента (для каналов, слайсов, массивов, мап, именованного типа и указателей).
 	Struct    *StructInfo    // Тип структуры (может быть nil).
 	Interface *InterfaceInfo // Тип интерфейса (может быть nil).
 	Signature *SignatureInfo // Тип сигнатуры функции (может быть nil).
@@ -452,6 +453,8 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 	typeInfo := &TypeInfo{}
 
 	switch t := t.(type) {
+	default:
+		fmt.Printf("%T\n", t)
 	case *types.Basic:
 		typeInfo.Name = t.Name()
 		typeInfo.IsBasic = true
@@ -468,7 +471,15 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		default: // для types.Int, types.Uint, types.Float64, types.Uint64, types.Int64 и других.
 			typeInfo.BitSize = 64
 		}
+	case *types.Alias:
+		typeInfo.Name = t.Obj().Name()
+		typeInfo.IsAlias = true
 
+		// elemType, err := typeToTypeInfo(pkg, t.Obj().Type())
+		// if err != nil {
+		// return nil, err
+		// }
+		// typeInfo.ElemType = elemType
 	case *types.Chan:
 		typeInfo.Name = "chan"
 		typeInfo.IsChan = true
@@ -517,6 +528,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		}
 		typeInfo.ElemType = elemType
 	case *types.Named:
+		typeInfo.IsNamed = true
 		typeInfo.Name = t.Obj().Name()
 		if pkg := t.Obj().Pkg(); pkg != nil {
 			typeInfo.Package = pkg.Path()
@@ -526,7 +538,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 			if err != nil {
 				return nil, err
 			}
-			typeInfo.Named = named
+			typeInfo.ElemType = named
 		}
 	case *types.Struct:
 		typeInfo.Name = "struct"
