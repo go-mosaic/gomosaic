@@ -211,7 +211,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 		}).
 		BlockFunc(func(group *jen.Group) {
 			group.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("opts")).Block(
-				jen.Id("o").Call(jen.Id(recvName).Dot("opts")),
+				jen.Id("o").Call(jen.Op("&").Id(recvName).Dot("opts")),
 			)
 			group.List(jen.Id("ctx"), jen.Id("cancel")).Op(":=").Qual("context", "WithCancel").Call(jen.Id(recvName).Dot("opts").Dot("ctx"))
 			group.Defer().Id("cancel").Call()
@@ -385,7 +385,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					),
 				),
 			)
-			group.List(jen.Id("resp"), jen.Err()).Op(":=").Id(recvName).Dot("client").Dot("Do").Call(jen.Id("req"))
+			group.List(jen.Id("resp"), jen.Err()).Op(":=").Id(recvName).Dot("opts").Dot("client").Dot("Do").Call(jen.Id("req"))
 			group.If(jen.Err().Op("!=").Nil()).Block(
 				g.genTrace(
 					g.genAddEventTrace(jen.Lit("do request error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
@@ -530,13 +530,38 @@ func (g *ClientGenerator) genParamSetters(params []*service.MethodParamOpt) jen.
 	return group
 }
 
-func (g *ClientGenerator) genStructMethod(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genClientMethod(methodOpt *service.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	clientName := clientStructName(methodOpt.Iface)
-	methodReqName := methodReqName(methodOpt)
+	methodMakeRequestName := methodMakeRequestName(methodOpt)
+	methodName := methodRequestName(methodOpt)
 
-	group.Func().Params(jen.Id(recvName).Op("*").Id(clientName)).Id(methodOpt.Func.Name).
+	group.Func().Params(jen.Id("c").Op("*").Id(clientName)).Id(methodMakeRequestName).
+		ParamsFunc(func(group *jen.Group) {
+			for _, param := range methodOpt.Params {
+				if param.Required {
+					group.Id(strcase.ToLowerCamel(param.Var.Name)).Add(jenutils.TypeInfoQual(param.Var.Type, g.qualifier.Qual))
+				}
+			}
+		}).
+		Op("*").Id(methodName).BlockFunc(func(group *jen.Group) {
+		group.Id("m").Op(":=").Op("&").Id(methodName).Values(
+			jen.Id("opts").Op(":").Id("c").Dot("opts"),
+			jen.Id("c").Op(":").Id("c"),
+		)
+		for _, param := range methodOpt.Params {
+			if param.Var.IsContext {
+				continue
+			}
+			if param.Required {
+				group.Id("m").Dot("params").Dot(strcase.ToLowerCamel(param.Var.Name)).Op("=").Id(strcase.ToLowerCamel(param.Var.Name))
+			}
+		}
+		group.Return(jen.Id("m"))
+	})
+
+	group.Func().Params(jen.Id("c").Op("*").Id(clientName)).Id(methodOpt.Func.Name).
 		ParamsFunc(func(group *jen.Group) {
 			for _, param := range methodOpt.Func.Params {
 				group.Id(param.Name).Add(jenutils.TypeInfoQual(param.Type, g.qualifier.Qual))
@@ -552,7 +577,7 @@ func (g *ClientGenerator) genStructMethod(methodOpt *service.MethodOpt) jen.Code
 				for _, param := range methodOpt.Results {
 					group.Id(strcase.ToLowerCamel(param.Var.Name))
 				}
-			}).Op("=").Id(recvName).Dot(methodReqName).CallFunc(func(group *jen.Group) {
+			}).Op("=").Id("c").Dot(methodMakeRequestName).CallFunc(func(group *jen.Group) {
 				for _, param := range methodOpt.Params {
 					if param.Required {
 						group.Id(strcase.ToLowerCamel(param.Var.Name))
@@ -570,43 +595,6 @@ func (g *ClientGenerator) genStructMethod(methodOpt *service.MethodOpt) jen.Code
 			})
 			group.Return()
 		})
-
-	return group
-}
-
-func (g *ClientGenerator) genReqStructMethod(methodOpt *service.MethodOpt) jen.Code {
-	group := jen.NewFile("")
-
-	methodRequestName := methodRequestName(methodOpt)
-	clientName := clientStructName(methodOpt.Iface)
-	methodReqName := methodReqName(methodOpt)
-
-	group.Func().Params(jen.Id(recvName).Op("*").Id(clientName)).Id(methodReqName).
-		ParamsFunc(func(group *jen.Group) {
-			for _, param := range methodOpt.Params {
-				if param.Required {
-					group.Id(strcase.ToLowerCamel(param.Var.Name)).Add(jenutils.TypeInfoQual(param.Var.Type, g.qualifier.Qual))
-				}
-			}
-		}).
-		Op("*").Id(methodRequestName).BlockFunc(func(group *jen.Group) {
-		group.Id("m").Op(":=").Op("&").Id(methodRequestName).Values(
-			jen.Id("client").Op(":").Id(recvName).Dot("opts").Dot("client"),
-			jen.Id("opts").Op(":").Op("&").Id(clientOptionName).Values(
-				jen.Id("ctx").Op(":").Qual("context", "TODO").Call(),
-			),
-			jen.Id("c").Op(":").Id(recvName),
-		)
-		for _, param := range methodOpt.Params {
-			if param.Var.IsContext {
-				continue
-			}
-			if param.Required {
-				group.Id("m").Dot("params").Dot(strcase.ToLowerCamel(param.Var.Name)).Op("=").Id(strcase.ToLowerCamel(param.Var.Name))
-			}
-		}
-		group.Return(jen.Id("m"))
-	})
 
 	return group
 }
@@ -660,8 +648,7 @@ func (g *ClientGenerator) genReqStruct(methodOpt *service.MethodOpt) jen.Code {
 
 	group.Type().Id(methodRequestName).StructFunc(func(group *jen.Group) {
 		group.Id("c").Op("*").Id(clientName)
-		group.Id("client").Op("*").Qual(service.HTTPPkg, "Client")
-		group.Id("opts").Op("*").Id(clientOptionName)
+		group.Id("opts").Id(clientOptionName)
 		group.Id("params").StructFunc(func(group *jen.Group) {
 			for _, param := range methodOpt.Params {
 				if param.Var.IsContext {
@@ -678,13 +665,10 @@ func (g *ClientGenerator) genReqStruct(methodOpt *service.MethodOpt) jen.Code {
 func (g *ClientGenerator) genClientEndpoint(methodOpt *service.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
-	group.Const().Id(strcase.ToLowerCamel(methodOpt.Func.Name) + "ShortName").Op("=").Lit(methodOpt.Func.ShortName)
-	group.Const().Id(strcase.ToLowerCamel(methodOpt.Func.Name) + "FullName").Op("=").Lit(methodOpt.Func.FullName)
+	group.Add(g.genClientMethod(methodOpt))
 
 	group.Add(g.genReqStruct(methodOpt))
 	group.Add(g.genReqStructSetters(methodOpt))
-	group.Add(g.genReqStructMethod(methodOpt))
-	group.Add(g.genStructMethod(methodOpt))
 
 	if len(methodOpt.BodyParams) > 0 {
 		group.Add(g.genMakeBodyRequetsMethod(methodOpt))
@@ -718,12 +702,12 @@ func (g *ClientGenerator) genClientConstruct(ifaceOpt *service.IfaceOpt) jen.Cod
 		func(g *jen.Group) {
 			g.Id("c").Op(":=").Op("&").Id(clientName).Values(
 				jen.Id("target").Op(":").Id("target"),
-				jen.Id("opts").Op(":").Op("&").Id(clientOptionName).Values(
+				jen.Id("opts").Op(":").Id(clientOptionName).Values(
 					jen.Id("client").Op(":").Qual(service.CleanHTTPPkg, "DefaultClient").Call(),
 				),
 			)
 			g.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("opts")).Block(
-				jen.Id("o").Call(jen.Id("c").Dot("opts")),
+				jen.Id("o").Call(jen.Op("&").Id("c").Dot("opts")),
 			)
 			g.Return(jen.Id("c"))
 		},
@@ -734,13 +718,19 @@ func (g *ClientGenerator) genClientConstruct(ifaceOpt *service.IfaceOpt) jen.Cod
 
 func (g *ClientGenerator) genClientStruct(ifaceOpt *service.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
+
+	for _, m := range ifaceOpt.Methods {
+		group.Const().Id(strcase.ToLowerCamel(m.Func.Name) + "ShortName").Op("=").Lit(m.Func.ShortName)
+		group.Const().Id(strcase.ToLowerCamel(m.Func.Name) + "FullName").Op("=").Lit(m.Func.FullName)
+	}
+
 	clientName := clientStructName(ifaceOpt)
 
 	group.Const().Id(strcase.ToLowerCamel(ifaceOpt.NameTypeInfo.Name) + "ScopeName").Op("=").Lit(filepath.Base(ifaceOpt.NameTypeInfo.Package.Path))
 
 	group.Type().Id(clientName).StructFunc(func(g *jen.Group) {
 		g.Id("target").String()
-		g.Id("opts").Op("*").Id(clientOptionName)
+		g.Id("opts").Id(clientOptionName)
 	})
 
 	return group

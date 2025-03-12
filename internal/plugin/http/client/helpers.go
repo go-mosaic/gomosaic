@@ -21,7 +21,7 @@ func methodRequestName(methodOpt *service.MethodOpt) string {
 	return methodOpt.Iface.NameTypeInfo.Name + methodOpt.Func.Name + "Request"
 }
 
-func methodReqName(methodOpt *service.MethodOpt) string {
+func methodMakeRequestName(methodOpt *service.MethodOpt) string {
 	return methodOpt.Func.Name + "Request"
 }
 
