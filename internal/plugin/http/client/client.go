@@ -266,8 +266,8 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 
 			group.Id("req").Dot("Header").Dot("Set").Call(jen.Lit("Accept"), jen.Lit("application/json"))
 
-			group.If(jen.Id("r").Dot("opts").Dot("propagation").Op("!=").Nil()).Block(
-				jen.Id("r").Dot("opts").Dot("propagation").Dot("Inject").Call(
+			group.If(jen.Id("r").Dot("opts").Dot("propagator").Op("!=").Nil()).Block(
+				jen.Id("r").Dot("opts").Dot("propagator").Dot("Inject").Call(
 					jen.Id("ctx"),
 					jen.Qual(service.OtelPropagationPkg, "HeaderCarrier").Call(jen.Id("req").Dot("Header")),
 				),
