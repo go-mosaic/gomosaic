@@ -18,14 +18,14 @@ func (p *PluginServerEcho) Name() string { return "http-server-echo" }
 func (p *PluginServerEcho) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (files map[string]gomosaic.File, errs error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 
-	services, err := service.ServiceLoad("http", types)
+	services, err := service.ServiceLoad(module, "http", types)
 	if err != nil {
 		return nil, err
 	}
 
 	f := gomosaic.NewGoFile(module, outputDir)
 
-	serverGen := server.NewServer(new(server.StrategyEcho), f)
+	serverGen := server.NewServer(new(server.StrategyEcho), module, f)
 	code, err := serverGen.Generate(services)
 	if err != nil {
 		errs = multierror.Append(errs, err)

@@ -77,7 +77,6 @@ func (s *StrategyChi) HandlerFunc(method string, pattern string, middlewares jen
 				jen.Id(s.ReqArgName()).Op("*").Qual(service.HTTPPkg, "Request"),
 			).BlockFunc(func(g *jen.Group) {
 				handlerFunc(g)
-				g.Return()
 			}),
 		),
 	)

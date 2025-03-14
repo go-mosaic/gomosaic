@@ -20,9 +20,17 @@ type ErrorOpt struct {
 	MethodName string
 }
 
+type MethodTemplOpt struct {
+	Path     string `option:"path"`
+	PkgPath  string
+	FuncName string
+	Params   []string
+}
+
 type MethodOpt struct {
-	Iface              *IfaceOpt
-	Func               *gomosaic.MethodInfo
+	Iface *IfaceOpt
+	Func  *gomosaic.MethodInfo
+
 	TimeFormat         string           `option:"time-format"`
 	Method             string           `option:"method" valid:"in,params:'GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH'"`
 	Path               string           `option:"path"`
@@ -32,6 +40,7 @@ type MethodOpt struct {
 	WrapReq            MethodWrapOpt    `option:"wrap-req"`
 	WrapResp           MethodWrapOpt    `option:"wrap-resp"`
 	Single             SingleOpt        `option:"single"`
+	Templ              MethodTemplOpt   `option:"templ"`
 	Context            *gomosaic.VarInfo
 	Error              *gomosaic.VarInfo
 	Params             []*MethodParamOpt
@@ -108,7 +117,7 @@ type IfaceOpt struct {
 	Methods            []*MethodOpt
 }
 
-func ServiceLoad(prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {
+func ServiceLoad(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {
 	for _, nameTypeInfo := range types {
 		if nameTypeInfo.Type.Interface == nil {
 			continue
@@ -127,6 +136,22 @@ func ServiceLoad(prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*I
 			err := option.Unmarshal(prefix, m.Annotations, methodOpt)
 			if err != nil {
 				errs = multierror.Append(errs, err)
+			}
+
+			if methodOpt.Templ.Path != "" {
+				pkgPath, funcName, err := module.ParsePath(methodOpt.Templ.Path)
+				if err != nil {
+					errs = multierror.Append(errs, err)
+				} else {
+					funcName, params, err := gomosaic.ParseFunctionCall(funcName)
+					if err != nil {
+						errs = multierror.Append(errs, err)
+					} else {
+						methodOpt.Templ.PkgPath = pkgPath
+						methodOpt.Templ.FuncName = funcName
+						methodOpt.Templ.Params = params
+					}
+				}
 			}
 
 			if methodOpt.WrapReq.Path != "" {

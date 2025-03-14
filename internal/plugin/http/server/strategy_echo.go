@@ -84,7 +84,6 @@ func (s *StrategyEcho) HandlerFunc(method string, pattern string, middlewares je
 		jen.Lit(pattern),
 		jen.Func().Params(jen.Id(s.ReqArgName()).Qual(service.EchoPkg, "Context")).Params(jen.Id("_").Error()).BlockFunc(func(g *jen.Group) {
 			handlerFunc(g)
-			g.Return()
 		}),
 		middlewares,
 	)

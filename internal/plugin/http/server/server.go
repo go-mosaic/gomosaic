@@ -6,6 +6,7 @@ import (
 	"github.com/dave/jennifer/jen"
 
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/pkg/strcase"
 	"github.com/go-mosaic/gomosaic/pkg/typetransform"
@@ -18,6 +19,7 @@ type Qualifier interface {
 }
 
 type ServerGenerator struct {
+	module    *gomosaic.ModuleInfo
 	strategy  Strategy
 	qualifier Qualifier
 }
@@ -304,29 +306,29 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 
 				respName := "resp"
 
-				if len(m.BodyResults) > 0 {
-					if len(m.BodyResults) == 1 && m.Single.Resp {
-						respName = m.BodyResults[0].Var.Name
-					} else {
-						structFields := service.MakeStructFieldsFromResults(m.BodyResults, g.qualifier.Qual)
+				// if len(m.BodyResults) > 0 {
+				if len(m.BodyResults) == 1 && m.Single.Resp {
+					respName = m.BodyResults[0].Var.Name
+				} else {
+					structFields := service.MakeStructFieldsFromResults(m.BodyResults, g.qualifier.Qual)
 
-						if len(m.WrapResp.PathParts) > 0 {
-							structFields = service.WrapStruct(m.WrapResp.PathParts, structFields)
-						}
-
-						group.Var().Id(respName).Struct(structFields)
-
-						for _, result := range m.BodyResults {
-							group.Id(respName).Do(func(s *jen.Statement) {
-								for _, name := range m.WrapResp.PathParts {
-									s.Dot(strcase.ToCamel(name))
-								}
-							}).Dot(strcase.ToCamel(result.Var.Name)).Op("=").Id(result.Var.Name)
-						}
+					if len(m.WrapResp.PathParts) > 0 {
+						structFields = service.WrapStruct(m.WrapResp.PathParts, structFields)
 					}
 
-					group.Add(g.genBodyResultWrite(m.Iface, respName))
+					group.Var().Id(respName).Struct(structFields)
+
+					for _, result := range m.BodyResults {
+						group.Id(respName).Do(func(s *jen.Statement) {
+							for _, name := range m.WrapResp.PathParts {
+								s.Dot(strcase.ToCamel(name))
+							}
+						}).Dot(strcase.ToCamel(result.Var.Name)).Op("=").Id(result.Var.Name)
+					}
 				}
+
+				group.Add(g.genBodyResultWrite(m, respName))
+				// }
 			}))
 		}
 	})
@@ -334,7 +336,7 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 	return group
 }
 
-func (g *ServerGenerator) genBodyResultWrite(ifaceOpt *service.IfaceOpt, respName string) jen.Code {
+func (g *ServerGenerator) genBodyResultWrite(m *service.MethodOpt, respName string) jen.Code {
 	group := jen.NewFile("")
 
 	group.Var().Id("dataBytes").Index().Byte()
@@ -342,19 +344,16 @@ func (g *ServerGenerator) genBodyResultWrite(ifaceOpt *service.IfaceOpt, respNam
 	group.Id("acceptHeader").Op(":=").Add(g.strategy.HeaderParamValue("accept"))
 	group.Id("ah").Op(":=").Qual(service.MimeheaderPkg, "ParseAcceptHeader").Call(jen.Id("acceptHeader"))
 
-	group.List(jen.Id("_"), jen.Id("mtype"), jen.Id("ok")).Op(":=").Id("ah").Dot("Negotiate").Call(
+	group.List(jen.Id("_"), jen.Id("mtype"), jen.Id("_")).Op(":=").Id("ah").Dot("Negotiate").Call(
 		jen.Index().String().Values(
 			jen.Lit("text/html"),
 			jen.Lit("application/json"),
 		),
-		jen.Lit("text/html"),
-	)
-	group.If(jen.Op("!").Id("ok")).Block(
-		jen.Return(),
+		jen.Lit("application/json"),
 	)
 
-	group.Switch(jen.Id("mtype")).Block(
-		jen.Default().BlockFunc(func(group *jen.Group) {
+	group.Switch(jen.Id("mtype")).BlockFunc(func(group *jen.Group) {
+		group.Default().BlockFunc(func(group *jen.Group) {
 			group.If(
 				jen.List(jen.Id("t"), jen.Id("ok")).Op(":=").Any().Call(jen.Id(respName)).Assert(
 					jen.Interface(jen.Id("Bytes").Params(jen.Id("string")).Params(jen.Index().Id("byte"), jen.Id("bool"))),
@@ -370,18 +369,41 @@ func (g *ServerGenerator) genBodyResultWrite(ifaceOpt *service.IfaceOpt, respNam
 			)
 			group.Add(g.strategy.WriteBody(nil, jen.Qual(service.HTTPPkg, "StatusNotAcceptable")))
 			group.Return()
-		}),
-		jen.Case(jen.Lit("application/json")).Block(
+		})
+		group.Case(jen.Lit("application/json")).Block(
 			jen.Id("w").Dot("Header").Call().Dot("Set").Call(jen.Lit("content-type"), jen.Lit("application/json")),
 			jen.List(jen.Id("dataBytes"), jen.Id("err")).Op("=").Qual("encoding/json", "Marshal").Call(jen.Id(respName)),
 			jen.If(jen.Id("err").Op("!=").Id("nil")).Block(
-				g.genErrorEncoderCall(ifaceOpt),
+				g.genErrorEncoderCall(m.Iface),
 				jen.Return(),
 			),
-		),
-	)
+			jen.Add(g.strategy.WriteBody(jen.Id("dataBytes"), jen.Lit(200))), //nolint: mnd
+			jen.Return(),
+		)
 
-	group.Add(g.strategy.WriteBody(jen.Id("dataBytes"), jen.Lit(200))) //nolint: mnd
+		if m.Templ.Path != "" {
+			group.Case(jen.Lit("text/html")).BlockFunc(func(group *jen.Group) {
+				var callParams []jen.Code
+
+				if len(m.BodyResults) == 1 && m.Single.Resp {
+					callParams = append(callParams, jen.Id(respName))
+				} else {
+					for _, p := range m.Templ.Params {
+						callParams = append(callParams, jen.Id("resp").Dot(strcase.ToCamel(p)))
+					}
+				}
+
+				group.Qual(service.TemplPkg, "Handler").Call(
+					jen.Do(g.qualifier.Qual(m.Templ.PkgPath, m.Templ.FuncName)).Call(callParams...),
+				).Dot("ServeHTTP").Call(
+					jen.Id("w"),
+					jen.Id("r"),
+				)
+
+				group.Return()
+			})
+		}
+	})
 
 	return group
 }
@@ -459,10 +481,12 @@ func (g *ServerGenerator) Generate(services []*service.IfaceOpt) (jen.Code, erro
 
 func NewServer(
 	strategy Strategy,
+	module *gomosaic.ModuleInfo,
 	qualifier Qualifier,
 ) *ServerGenerator {
 	return &ServerGenerator{
 		strategy:  strategy,
+		module:    module,
 		qualifier: qualifier,
 	}
 }

@@ -42,8 +42,11 @@ func TypeInfoQual(typeInfo *gomosaic.TypeInfo, qual QualFunc) (s *jen.Statement)
 	case typeInfo.IsMap:
 		s.Map(TypeInfoQual(typeInfo.KeyType, qual)).Add(TypeInfoQual(typeInfo.ElemType, qual))
 		return s
+	case typeInfo.IsArray:
+		return s.Index(jen.Lit(typeInfo.ArrayLen)).Add(TypeInfoQual(typeInfo.ElemType, qual))
+	case typeInfo.IsSlice:
+		return s.Index().Add(TypeInfoQual(typeInfo.ElemType, qual))
 	case typeInfo.IsNamed:
-
 		s.Do(qual(typeInfo.Package, typeInfo.Name))
 		return s
 	}

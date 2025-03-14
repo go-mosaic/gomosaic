@@ -37,6 +37,7 @@ const (
 	OtelTraceAttrPkg   = "go.opentelemetry.io/otel/attribute"
 	OtelCodesPkg       = "go.opentelemetry.io/otel/codes"
 	OtelPropagationPkg = "go.opentelemetry.io/otel/propagation"
+	TemplPkg           = "github.com/a-h/templ"
 )
 
 const paramNameDefaultFormatter = "lowerCamel"

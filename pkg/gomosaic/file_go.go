@@ -59,7 +59,7 @@ func NewGoFile(module *ModuleInfo, outputDir string, opts ...GoFileOption) *GoFi
 		optApply(o)
 	}
 
-	packagePath := strings.Replace(outputDir, module.Dir, "", -1)
+	packagePath := strings.ReplaceAll(outputDir, module.Dir, "")
 	packagePath = filepath.Join(module.Path, strings.TrimLeft(packagePath, string(os.PathSeparator)))
 
 	packageName := guessAlias(filepath.Base(outputDir))

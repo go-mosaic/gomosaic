@@ -18,7 +18,7 @@ func (p *PluginClientTesting) Name() string { return "http-client-test" }
 func (p *PluginClientTesting) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (files map[string]gomosaic.File, errs error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 
-	services, err := service.ServiceLoad("http", types)
+	services, err := service.ServiceLoad(module, "http", types)
 	if err != nil {
 		return nil, err
 	}
