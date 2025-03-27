@@ -19,6 +19,24 @@ type ModuleInfo struct {
 }
 
 func (m *ModuleInfo) ParsePath(s string) (pkgPath, name string, err error) {
+	// openFn := strings.Index(s, "(")
+	// closeFn := strings.LastIndex(s, ")")
+
+	// if openFn != -1 && closeFn == -1 {
+	// 	return "", "", fmt.Errorf("invalid import path: %s, example ~/pkg/foo.ContextKey()", s)
+	// }
+
+	// if openFn == -1 && closeFn != -1 {
+	// 	return "", "", fmt.Errorf("invalid import path: %s, example ~/pkg/foo.ContextKey()", s)
+	// }
+
+	// var funcCall string
+	// // находим вызов функции и убираем его из строки
+	// if openFn != -1 && closeFn != -1 {
+	// 	funcCall = s[openFn:]
+	// 	s = s[:openFn-1]
+	// }
+
 	u, err := url.Parse("//" + s)
 	if err != nil || u.Path == "" {
 		return "", "", fmt.Errorf("invalid import path: %w", err)
@@ -34,7 +52,7 @@ func (m *ModuleInfo) ParsePath(s string) (pkgPath, name string, err error) {
 	} else {
 		pkgPath = u.Host + pkgPath
 	}
-	return
+	return pkgPath, name, err
 }
 
 // LoadModuleInfo загружает информацию о модуле из go.mod

@@ -755,6 +755,7 @@ func ParseAnnotations(comments []*CommentInfo) (annotations Annotations, err err
 		if err != nil {
 			return nil, err
 		}
+
 		posInfo := parsePosition(comment.Position)
 		annotations = append(annotations, &AnnotationInfo{
 			Annotation: a,

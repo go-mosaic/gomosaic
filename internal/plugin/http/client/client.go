@@ -280,68 +280,66 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					)
 
 					if !service.IsObjectType(methodOpt.BodyParams[0].Var.Type) {
-						group.Case(jen.Lit("application/x-www-form-urlencoded")).BlockFunc(func(group *jen.Group) {
-							group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("application/x-www-form-urlencoded"))
+						if methodOpt.Use.URLEncoded {
+							group.Case(jen.Lit("application/x-www-form-urlencoded")).BlockFunc(func(group *jen.Group) {
+								group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("application/x-www-form-urlencoded"))
 
-							group.Id("body").Op(":=").Qual(service.URLPkg, "Values").Values()
+								group.Id("body").Op(":=").Qual(service.URLPkg, "Values").Values()
 
-							for _, p := range methodOpt.BodyParams {
-								if p.Var.IsContext || !p.Var.Type.IsBasic {
-									continue
-								}
-								paramID := jen.Id("r").Dot("params").Dot(strcase.ToLowerCamel(p.Var.Name))
+								for _, p := range methodOpt.BodyParams {
+									if p.Var.IsContext || !p.Var.Type.IsBasic {
+										continue
+									}
+									paramID := jen.Id("r").Dot("params").Dot(strcase.ToLowerCamel(p.Var.Name))
 
-								code := typetransform.For(p.Var.Type).
-									SetQualFunc(g.qualifier.Qual).
-									SetValueID(paramID).
-									Format()
+									valueID := jen.Add(paramID)
+									if !p.Required {
+										valueID = jen.Op("*").Add(valueID)
+									}
 
-								if !p.Required {
-									group.If(jen.Add(paramID).Op("!=").Nil()).BlockFunc(func(group *jen.Group) {
-										group.Id("body").Dot("Set").Call(jen.Lit(p.Name), jen.Op("*").Add(code))
-									})
-								} else {
-									group.Id("body").Dot("Set").Call(jen.Lit(p.Name), code)
-								}
-							}
+									code := typetransform.For(p.Var.Type).
+										SetQualFunc(g.qualifier.Qual).
+										SetValueID(valueID).
+										Format()
 
-							group.Id("req").Dot("Body").Op("=").Add(wrapIOCloser(jen.Qual(service.StringsPkg, "NewReader").Call(jen.Id("body").Dot("Encode").Call())))
-						})
-
-						group.Case(jen.Lit("multipart/form-data")).BlockFunc(func(group *jen.Group) {
-							group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("multipart/form-data"))
-
-							group.Var().Id("body").Qual(service.BytesPkg, "Buffer")
-							group.Id("multipartWriter").Op(":=").Qual(service.MimeMultipartPkg, "NewWriter").Call(jen.Op("&").Id("body"))
-
-							for _, p := range methodOpt.BodyParams {
-								if p.Var.IsContext || !p.Var.Type.IsBasic {
-									continue
-								}
-								paramID := jen.Id("r").Dot("params").Dot(strcase.ToLowerCamel(p.Var.Name))
-
-								code := typetransform.For(p.Var.Type).
-									SetQualFunc(g.qualifier.Qual).
-									SetValueID(paramID).
-									Format()
-
-								if !p.Required {
-									group.If(jen.Add(paramID).Op("!=").Nil()).BlockFunc(func(group *jen.Group) {
-										group.If(
-											jen.Err().Op(":=").Id("multipartWriter").Dot("WriteField").Call(jen.Lit(p.Name), jen.Op("*").Add(code)),
-											jen.Err().Op("!=").Nil(),
-										).Block(
-											g.genTrace(
-												g.genAddEventTrace(jen.Lit("multipart write feld "+p.Name+" error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
-												g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
-											),
-											jen.Return(
-												service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
-											),
+									if !p.Required {
+										group.If(jen.Add(paramID).Op("!=").Nil()).Block(
+											group.Id("body").Dot("Set").Call(jen.Lit(p.Name), code),
 										)
-									})
-								} else {
-									group.If(
+									} else {
+										group.Id("body").Dot("Set").Call(jen.Lit(p.Name), code)
+									}
+								}
+
+								group.Id("req").Dot("Body").Op("=").Add(wrapIOCloser(jen.Qual(service.StringsPkg, "NewReader").Call(jen.Id("body").Dot("Encode").Call())))
+							})
+						}
+
+						if methodOpt.Use.Multipart {
+							group.Case(jen.Lit("multipart/form-data")).BlockFunc(func(group *jen.Group) {
+								group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("multipart/form-data"))
+
+								group.Var().Id("body").Qual(service.BytesPkg, "Buffer")
+								group.Id("multipartWriter").Op(":=").Qual(service.MimeMultipartPkg, "NewWriter").Call(jen.Op("&").Id("body"))
+
+								for _, p := range methodOpt.BodyParams {
+									if p.Var.IsContext || !p.Var.Type.IsBasic {
+										continue
+									}
+
+									paramID := jen.Id("r").Dot("params").Dot(strcase.ToLowerCamel(p.Var.Name))
+									valueID := paramID.Clone()
+
+									if !p.Required {
+										valueID = jen.Op("*").Add(valueID)
+									}
+
+									code := typetransform.For(p.Var.Type).
+										SetQualFunc(g.qualifier.Qual).
+										SetValueID(valueID).
+										Format()
+
+									writeFieldCode := jen.If(
 										jen.Err().Op("=").Id("multipartWriter").Dot("WriteField").Call(jen.Lit(p.Name), code),
 										jen.Err().Op("!=").Nil(),
 									).Block(
@@ -349,16 +347,21 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 											g.genAddEventTrace(jen.Lit("multipart write feld "+p.Name+" error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
 											g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 										),
-
 										jen.Return(
 											service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
 										),
 									)
+
+									if !p.Required {
+										group.If(jen.Add(paramID).Op("!=").Nil()).Block(writeFieldCode)
+									} else {
+										group.Add(writeFieldCode)
+									}
 								}
-							}
-							group.Id("multipartWriter").Dot("Close").Call()
-							group.Id("req").Dot("Body").Op("=").Add(wrapIOCloser(jen.Op("&").Id("body")))
-						})
+								group.Id("multipartWriter").Dot("Close").Call()
+								group.Id("req").Dot("Body").Op("=").Add(wrapIOCloser(jen.Op("&").Id("body")))
+							})
+						}
 					}
 				})
 			}

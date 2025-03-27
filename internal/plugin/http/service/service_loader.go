@@ -10,6 +10,8 @@ import (
 	"github.com/go-mosaic/gomosaic/pkg/strcase"
 )
 
+const defaultMemory = 32 << 20 // 32 MB
+
 type ErrorOpt struct {
 	Expr       string `option:",fromValue"`
 	Type       string `option:"type,fromParam"`
@@ -20,39 +22,38 @@ type ErrorOpt struct {
 	MethodName string
 }
 
-type MethodTemplOpt struct {
-	Path     string `option:"path"`
-	PkgPath  string
-	FuncName string
-	Params   []string
+type UseOpt struct {
+	Multipart  bool `option:"multipart"`
+	URLEncoded bool `option:"url-encoded"`
 }
 
 type MethodOpt struct {
 	Iface *IfaceOpt
 	Func  *gomosaic.MethodInfo
 
-	TimeFormat         string           `option:"time-format"`
-	Method             string           `option:"method" valid:"in,params:'GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH'"`
-	Path               string           `option:"path"`
-	Openapi            MethodOpenapiOpt `option:"openapi"`
-	MultipartMaxMemory int64            `option:"multipart-max-memory"`
-	Query              MethodQueryOpt   `option:"query"`
-	WrapReq            MethodWrapOpt    `option:"wrap-req"`
-	WrapResp           MethodWrapOpt    `option:"wrap-resp"`
-	Single             SingleOpt        `option:"single"`
-	Templ              MethodTemplOpt   `option:"templ"`
-	Context            *gomosaic.VarInfo
-	Error              *gomosaic.VarInfo
-	Params             []*MethodParamOpt
-	Results            []*MethodResultOpt
-	BodyParams         []*MethodParamOpt
-	QueryParams        []*MethodParamOpt
-	HeaderParams       []*MethodParamOpt
-	CookieParams       []*MethodParamOpt
-	PathParams         []*MethodParamOpt
-	BodyResults        []*MethodResultOpt
-	HeaderResults      []*MethodResultOpt
-	CookieResults      []*MethodResultOpt
+	TimeFormat    string           `option:"time-format"`
+	Method        string           `option:"method" valid:"in,params:'GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH'"`
+	Path          string           `option:"path"`
+	Openapi       MethodOpenapiOpt `option:"openapi"`
+	FormMaxMemory int              `option:"form-max-memory"`
+	Query         MethodQueryOpt   `option:"query"`
+	WrapReq       MethodWrapOpt    `option:"wrap-req"`
+	WrapResp      MethodWrapOpt    `option:"wrap-resp"`
+	Single        SingleOpt        `option:"single"`
+	Default       DefaultOpt       `option:"default"`
+	Use           UseOpt           `option:"use"`
+	Context       *gomosaic.VarInfo
+	Error         *gomosaic.VarInfo
+	Params        []*MethodParamOpt
+	Results       []*MethodResultOpt
+	BodyParams    []*MethodParamOpt
+	QueryParams   []*MethodParamOpt
+	HeaderParams  []*MethodParamOpt
+	CookieParams  []*MethodParamOpt
+	PathParams    []*MethodParamOpt
+	BodyResults   []*MethodResultOpt
+	HeaderResults []*MethodResultOpt
+	CookieResults []*MethodResultOpt
 }
 
 type SingleOpt struct {
@@ -108,13 +109,18 @@ type MethodResultOpt struct {
 	Flat     bool               `option:"flat"`
 }
 
+type DefaultOpt struct {
+	ContentType string `option:"content-type"`
+	Accept      string `option:"accept"`
+}
+
 type IfaceOpt struct {
-	NameTypeInfo       *gomosaic.NameTypeInfo
-	Errors             []ErrorOpt `option:"error,inline"`
-	ErrorText          string     `option:"error-text"`
-	Example            string     `option:"example" valid:"in,params:'http curl'"`
-	DefaultContentType string     `option:"default-content-type"`
-	Methods            []*MethodOpt
+	NameTypeInfo *gomosaic.NameTypeInfo
+	Errors       []ErrorOpt `option:"error,inline"`
+	ErrorText    string     `option:"error-text"`
+	Example      string     `option:"example" valid:"in,params:'http curl'"`
+	Default      DefaultOpt `option:"default"`
+	Methods      []*MethodOpt
 }
 
 func ServiceLoad(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {
@@ -138,20 +144,16 @@ func ServiceLoad(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.N
 				errs = multierror.Append(errs, err)
 			}
 
-			if methodOpt.Templ.Path != "" {
-				pkgPath, funcName, err := module.ParsePath(methodOpt.Templ.Path)
-				if err != nil {
-					errs = multierror.Append(errs, err)
-				} else {
-					funcName, params, err := gomosaic.ParseFunctionCall(funcName)
-					if err != nil {
-						errs = multierror.Append(errs, err)
-					} else {
-						methodOpt.Templ.PkgPath = pkgPath
-						methodOpt.Templ.FuncName = funcName
-						methodOpt.Templ.Params = params
-					}
-				}
+			if methodOpt.FormMaxMemory == 0 {
+				methodOpt.FormMaxMemory = defaultMemory
+			}
+
+			if methodOpt.Default.Accept == "" {
+				methodOpt.Default.Accept = ifaceOpt.Default.Accept
+			}
+
+			if methodOpt.Default.ContentType == "" {
+				methodOpt.Default.ContentType = ifaceOpt.Default.ContentType
 			}
 
 			if methodOpt.WrapReq.Path != "" {

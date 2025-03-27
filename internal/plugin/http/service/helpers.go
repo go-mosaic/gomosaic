@@ -38,6 +38,7 @@ const (
 	OtelCodesPkg       = "go.opentelemetry.io/otel/codes"
 	OtelPropagationPkg = "go.opentelemetry.io/otel/propagation"
 	TemplPkg           = "github.com/a-h/templ"
+	RuntimeTransport   = "github.com/go-mosaic/runtime/transport"
 )
 
 const paramNameDefaultFormatter = "lowerCamel"
@@ -115,7 +116,7 @@ func IsObjectType(typeInfo *gomosaic.TypeInfo) (ok bool) {
 		typeInfo = typeInfo.ElemType
 	}
 
-	return typeInfo.Struct != nil || typeInfo.Interface != nil
+	return typeInfo.Struct != nil || typeInfo.Interface != nil || typeInfo.IsMap
 }
 
 func MakeEmptyResults(results []*MethodResultOpt, qualFunc jenutils.QualFunc, addinCodes ...jen.Code) (codes []jen.Code) {
