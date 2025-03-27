@@ -196,6 +196,7 @@ func ServiceLoad(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.N
 					for i, p := range methodOpt.Params {
 						if pathParamName == strcase.ToLowerCamel(p.Var.Name) {
 							methodOpt.Params[i].HTTPType = PathHTTPType
+							methodOpt.Params[i].Required = true
 							methodOpt.Params[i].PathParamIndex = idx
 							methodOpt.Params[i].PathParamName = pathParamName
 						}
