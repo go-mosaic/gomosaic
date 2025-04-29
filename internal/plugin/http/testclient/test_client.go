@@ -26,14 +26,14 @@ type ClientTestGenerator struct {
 }
 
 func (g *ClientTestGenerator) basicTypeToValue(typeInfo *gomosaic.TypeInfo) jen.Code {
-	switch {
+	switch typeInfo.BasicInfo {
 	default:
 		return jen.Lit(g.fake.Lorem().Sentence(10)) //nolint: mnd
-	case typeInfo.BasicInfo == gomosaic.IsBoolean:
+	case gomosaic.IsBoolean:
 		return jen.Lit(true)
-	case typeInfo.BasicInfo == gomosaic.IsInteger || typeInfo.BasicInfo == gomosaic.IsInteger|gomosaic.IsUnsigned:
+	case gomosaic.IsInteger, gomosaic.IsInteger | gomosaic.IsUnsigned:
 		return jen.Lit(g.fake.RandomNumber(5)) //nolint: mnd
-	case typeInfo.BasicInfo == gomosaic.IsFloat:
+	case gomosaic.IsFloat:
 		return jen.Lit(g.fake.Float64(2, 1, 100)) //nolint: mnd
 	}
 }
@@ -369,9 +369,10 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 func (g *ClientTestGenerator) genCheckError(methodOpt *service.MethodOpt, cfg Config) jen.Code {
 	group := jen.NewFile("").Null()
 
-	if !gomosaic.HasError(methodOpt.Func.Results) {
+	if _, ok := gomosaic.HasError(methodOpt.Func.Results); !ok {
 		return jen.Null()
 	}
+
 	if !cfg.CheckError {
 		group.If(jen.Err().Op("!=").Nil()).Block(
 			jen.Id("t").Dot("Fatalf").Call(jen.Lit("%s: %s"), jen.Lit("failed execute method "+methodOpt.Func.ShortName), jen.Id("err")),
@@ -482,7 +483,7 @@ func (g *ClientTestGenerator) Generate(ifaceOpts []*service.IfaceOpt, configs []
 									}
 								}
 							})
-							if cfg.CheckError || gomosaic.HasError(methodOpt.Func.Results) {
+							if _, ok := gomosaic.HasError(methodOpt.Func.Results); cfg.CheckError || ok {
 								s.Op(":=")
 							} else {
 								s.Op("=")

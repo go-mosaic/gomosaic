@@ -26,7 +26,7 @@ func (g *ServerGenerator) genServiceOptions(services []*service.IfaceOpt) jen.Co
 	group := jen.NewFile("")
 
 	for _, s := range services {
-		middlewareType := jen.Qual(service.RuntimeTransport, "Middleware")
+		middlewareType := jen.Qual(gomosaic.TransportPkg, "Middleware")
 		optionsName := s.NameTypeInfo.Name + "Options"
 		group.Add(g.genTypeOptions(optionsName, middlewareType, s.Methods))
 	}
@@ -60,7 +60,9 @@ func (g *ServerGenerator) genTypeOptions(optionsName string, middlewareType jen.
 }
 
 func (g *ServerGenerator) genOptionLoader(ifaceName string) jen.Code {
-	return jen.Id("o").Op(":=").Op("&").Id(ifaceName + "Options").Values()
+	return jen.If(jen.Id("opt").Op("==").Nil()).Block(
+		jen.Id("opt").Op("=").Op("&").Id(ifaceName + "Options").Values(),
+	)
 }
 
 func (g *ServerGenerator) genNonBodyParamsFunc(
@@ -253,7 +255,6 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 		group.Add(g.genOptionLoader(s.NameTypeInfo.Name))
 
 		group.Id("tr").Op(":=").Qual(g.strategy.TransportPkg(), g.strategy.TransportConstruct()).Call(jen.Id("router"))
-		group.Id("tr").Dot("Use").Call(jen.Id("o").Dot("middleware").Op("..."))
 
 		for _, m := range s.Methods {
 			pathParts := strings.Split(m.Path, "/")
@@ -327,7 +328,7 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 
 					group.Return(jen.Nil())
 				}),
-				jen.Id("o").Dot("middleware"+m.Func.Name).Op("..."),
+				jen.Append(jen.Id("opt").Dot("middleware"), jen.Id("opt").Dot("middleware"+m.Func.Name).Op("...")).Op("..."),
 			)
 		}
 	})

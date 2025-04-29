@@ -38,7 +38,6 @@ const (
 	OtelCodesPkg       = "go.opentelemetry.io/otel/codes"
 	OtelPropagationPkg = "go.opentelemetry.io/otel/propagation"
 	TemplPkg           = "github.com/a-h/templ"
-	RuntimeTransport   = "github.com/go-mosaic/runtime/transport"
 )
 
 const paramNameDefaultFormatter = "lowerCamel"

@@ -27,6 +27,29 @@ type ClientGenerator struct {
 	qualifier Qualifier
 }
 
+func NewClientGenerator(qualifier Qualifier) *ClientGenerator {
+	return &ClientGenerator{
+		qualifier: qualifier,
+	}
+}
+
+func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, error) {
+	group := jen.NewFile("")
+
+	group.Add(g.genTypes())
+
+	for _, s := range services {
+		if len(s.Errors) > 0 {
+			group.Add(g.genErrorTypes(s))
+		}
+		group.Add(g.genClientStruct(s))
+		group.Add(g.genClientConstruct(s))
+		group.Add(g.genClientEndpoints(s))
+	}
+
+	return group, nil
+}
+
 func (g *ClientGenerator) genReqBodyStruct(methodOpt *service.MethodOpt) jen.Code {
 	group := jen.NewFile("").Null()
 
@@ -1050,27 +1073,4 @@ func (g *ClientGenerator) genSetStatusErrorTrace(msg jen.Code) jen.Code {
 
 func (g *ClientGenerator) genSetStatusOkTrace(msg jen.Code) jen.Code {
 	return jen.Id("span").Dot("SetStatus").Call(jen.Qual(service.OtelCodesPkg, "Ok"), msg)
-}
-
-func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, error) {
-	group := jen.NewFile("")
-
-	group.Add(g.genTypes())
-
-	for _, s := range services {
-		if len(s.Errors) > 0 {
-			group.Add(g.genErrorTypes(s))
-		}
-		group.Add(g.genClientStruct(s))
-		group.Add(g.genClientConstruct(s))
-		group.Add(g.genClientEndpoints(s))
-	}
-
-	return group, nil
-}
-
-func NewClientGenerator(qualifier Qualifier) *ClientGenerator {
-	return &ClientGenerator{
-		qualifier: qualifier,
-	}
 }

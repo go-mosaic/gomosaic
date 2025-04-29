@@ -12,12 +12,12 @@ var _ Parser = &SliceTypeParse{}
 type SliceTypeParse struct{}
 
 func (s *SliceTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.TypeInfo, errorStatements []jen.Code, qualFn jenutils.QualFunc) (code jen.Code) {
-	switch {
+	switch typeInfo.BasicInfo {
 	default:
 		panic("unknown slice basic type")
-	case typeInfo.BasicInfo == gomosaic.IsString:
+	case gomosaic.IsString:
 		code = jen.Do(qualFn(ggRuntimePkg, "Split")).Call(valueID, jen.Lit(";"), jen.Op("&").Add(assignID))
-	case typeInfo.BasicInfo == gomosaic.IsNumeric:
+	case gomosaic.IsNumeric:
 		code = jen.Do(qualFn(ggRuntimePkg, "SplitInt")).Call(valueID, jen.Lit(";"), jen.Lit(10), jen.Lit(64), jen.Op("&").Add(assignID)) //nolint: mnd
 	}
 
@@ -25,12 +25,12 @@ func (s *SliceTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.Ty
 }
 
 func (s *SliceTypeParse) Format(valueID jen.Code, typeInfo *gomosaic.TypeInfo, qualFn jenutils.QualFunc) (code jen.Code) {
-	switch {
-	case typeInfo.BasicInfo == gomosaic.IsInteger:
+	switch typeInfo.BasicInfo { //nolint: exhaustive
+	case gomosaic.IsInteger:
 		return jen.Do(qualFn(ggRuntimePkg, "JoinInt")).Call(valueID, jen.Lit(","), jen.Lit(10)) //nolint: mnd
-	case typeInfo.BasicInfo == gomosaic.IsFloat:
+	case gomosaic.IsFloat:
 		return jen.Do(qualFn(ggRuntimePkg, "JoinFloat")).Call(valueID, jen.Lit(","), jen.Lit('f'), jen.Lit(2), jen.Lit(64)) //nolint: mnd
-	case typeInfo.BasicInfo == gomosaic.IsString:
+	case gomosaic.IsString:
 		return jen.Do(qualFn("strings", "Join")).Call(valueID, jen.Lit(","))
 	}
 

@@ -23,25 +23,17 @@ type ErrorOpt struct {
 }
 
 type UseOpt struct {
-	Multipart  bool `option:"multipart"`
+	// Включить обработку запросов multipart/form-data
+	Multipart bool `option:"multipart"`
+	// Включить обработку запросов application/x-www-form-urlencoded
 	URLEncoded bool `option:"url-encoded"`
 }
 
+// @docgen
+// Аннотации метода
 type MethodOpt struct {
-	Iface *IfaceOpt
-	Func  *gomosaic.MethodInfo
-
-	TimeFormat    string           `option:"time-format"`
-	Method        string           `option:"method" valid:"in,params:'GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH'"`
-	Path          string           `option:"path"`
-	Openapi       MethodOpenapiOpt `option:"openapi"`
-	FormMaxMemory int              `option:"form-max-memory"`
-	Query         MethodQueryOpt   `option:"query"`
-	WrapReq       MethodWrapOpt    `option:"wrap-req"`
-	WrapResp      MethodWrapOpt    `option:"wrap-resp"`
-	Single        SingleOpt        `option:"single"`
-	Default       DefaultOpt       `option:"default"`
-	Use           UseOpt           `option:"use"`
+	Iface         *IfaceOpt
+	Func          *gomosaic.MethodInfo
 	Context       *gomosaic.VarInfo
 	Error         *gomosaic.VarInfo
 	Params        []*MethodParamOpt
@@ -54,14 +46,33 @@ type MethodOpt struct {
 	BodyResults   []*MethodResultOpt
 	HeaderResults []*MethodResultOpt
 	CookieResults []*MethodResultOpt
+
+	// Формат времени для запроса
+	TimeFormat string `option:"time-format"`
+	// Метод запроса HTTP, допустимые значения: GET, HEAD, POST, PUT, DELETE, CONNECT, OPTIONS, TRACE, PATCH
+	Method string `option:"method" valid:"in,params:'GET HEAD POST PUT DELETE CONNECT OPTIONS TRACE PATCH'"`
+	// Путь запроса HTTP
+	Path    string           `option:"path"`
+	Openapi MethodOpenapiOpt `option:"openapi"`
+	// Максимальный размер тела HTTP запроса
+	FormMaxMemory int            `option:"form-max-memory"`
+	Query         MethodQueryOpt `option:"query"`
+	WrapReq       MethodWrapOpt  `option:"wrap-req"`
+	WrapResp      MethodWrapOpt  `option:"wrap-resp"`
+	Single        SingleOpt      `option:"single"`
+	Default       DefaultOpt     `option:"default"`
+	Use           UseOpt         `option:"use"`
 }
 
 type SingleOpt struct {
-	Req  bool `option:"req,asFlag"`
+	// Включает оборачивание запроса в структуру
+	Req bool `option:"req,asFlag"`
+	// Включает оборачивание ответа в структуру
 	Resp bool `option:"resp,asFlag"`
 }
 
 type MethodWrapOpt struct {
+	// Путь через точку в который необходимо обернуть запрос
 	Path      string `option:"path"`
 	PathParts []string
 }
@@ -81,6 +92,7 @@ type QueryValueOpt struct {
 }
 
 type MethodOpenapiOpt struct {
+	// Теги OpenAPI
 	Tags []string `option:"tags"`
 }
 
@@ -114,13 +126,16 @@ type DefaultOpt struct {
 	Accept      string `option:"accept"`
 }
 
+// Генерация HTTP сервера и клиента
 type IfaceOpt struct {
 	NameTypeInfo *gomosaic.NameTypeInfo
-	Errors       []ErrorOpt `option:"error,inline"`
-	ErrorText    string     `option:"error-text"`
-	Example      string     `option:"example" valid:"in,params:'http curl'"`
-	Default      DefaultOpt `option:"default"`
-	Methods      []*MethodOpt
+	// Ошибки методов
+	Errors []ErrorOpt `option:"error,inline"`
+	// Тест ошибок
+	ErrorText string     `option:"error-text"`
+	Default   DefaultOpt `option:"default"`
+	// Аннотации для методов
+	Methods []*MethodOpt
 }
 
 func ServiceLoad(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {

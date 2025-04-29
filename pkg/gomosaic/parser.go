@@ -270,8 +270,9 @@ type CommentInfo struct {
 }
 
 // ParsePackage парсит пакет и возвращает информацию о типах
-func ParsePackage(dir string, patterns []string) (nameTypesInfo []*NameTypeInfo, err error) {
-	for i := range patterns {
+func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, err error) {
+	patterns := make([]string, len(paths))
+	for i := range paths {
 		patterns[i] = "pattern=" + patterns[i]
 	}
 

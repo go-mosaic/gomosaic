@@ -15,13 +15,13 @@ type IntTypeParse struct{}
 
 func (s *IntTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.TypeInfo, errorStatements []jen.Code, qualFn jenutils.QualFunc) (code jen.Code) {
 	var parseFunc string
-	switch {
+	switch typeInfo.BasicInfo {
 	default:
 		panic(fmt.Sprintf("unknown basic number type: %v", typeInfo.BasicInfo))
-	case typeInfo.BasicInfo == gomosaic.IsInteger:
+	case gomosaic.IsInteger:
 		parseFunc = "ParseInt"
 
-	case typeInfo.BasicInfo == gomosaic.IsInteger|gomosaic.IsUnsigned:
+	case gomosaic.IsInteger | gomosaic.IsUnsigned:
 		parseFunc = "ParseUint"
 	}
 	return jen.If(jen.Err().Op(":=").Do(qualFn(ggRuntimePkg, parseFunc)).Call(
@@ -33,8 +33,9 @@ func (s *IntTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.Type
 }
 
 func (s *IntTypeParse) Format(valueID jen.Code, typeInfo *gomosaic.TypeInfo, qualFn jenutils.QualFunc) (code jen.Code) {
-	switch {
-	case typeInfo.BasicInfo == gomosaic.IsInteger:
+	//nolint: exhaustive
+	switch typeInfo.BasicInfo {
+	case gomosaic.IsInteger:
 		return jen.Qual("strconv", "FormatInt").CallFunc(func(g *jen.Group) {
 			if typeInfo.BitSize == 64 && typeInfo.BasicInfo == gomosaic.IsInteger && typeInfo.BasicKind != gomosaic.Int {
 				g.Add(valueID)
@@ -43,7 +44,7 @@ func (s *IntTypeParse) Format(valueID jen.Code, typeInfo *gomosaic.TypeInfo, qua
 			}
 			g.Lit(10) //nolint: mnd
 		})
-	case typeInfo.BasicInfo == gomosaic.IsInteger|gomosaic.IsUnsigned:
+	case gomosaic.IsInteger | gomosaic.IsUnsigned:
 		return jen.Qual("strconv", "FormatUint").CallFunc(func(g *jen.Group) {
 			if typeInfo.BitSize == 64 && typeInfo.BasicInfo == gomosaic.IsInteger && typeInfo.BasicKind != gomosaic.Uint {
 				g.Add(valueID)

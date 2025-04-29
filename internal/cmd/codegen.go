@@ -13,6 +13,7 @@ import (
 	"github.com/spf13/cobra"
 
 	_ "github.com/go-mosaic/gomosaic/internal/plugin/http"
+	_ "github.com/go-mosaic/gomosaic/internal/plugin/log"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 )
 

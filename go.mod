@@ -1,12 +1,15 @@
 module github.com/go-mosaic/gomosaic
 
-go 1.23
+go 1.23.0
+
+toolchain go1.24.1
 
 require (
+	github.com/a-h/templ v0.3.857
 	github.com/dave/jennifer v1.7.0
 	github.com/fatih/color v1.17.0
 	github.com/fatih/structtag v1.2.0
-	github.com/go-mosaic/runtime v1.0.0
+	github.com/go-mosaic/runtime v1.0.2
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/jaswdr/faker/v2 v2.3.3
 	github.com/spf13/cobra v1.8.0
@@ -24,5 +27,5 @@ require (
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	golang.org/x/sync v0.11.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
 )
