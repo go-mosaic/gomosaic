@@ -2,6 +2,7 @@ package structure
 
 import (
 	"github.com/dave/jennifer/jen"
+
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 )
 
@@ -61,9 +62,6 @@ func (g *Generator) generateBasicAlias(name string, t *gomosaic.TypeInfo) {
 
 func (g *Generator) generateSliceAlias(name string, t *gomosaic.TypeInfo) {
 	elemType := g.getTypeExpr(t.ElemType)
-	if elemType == nil {
-		return
-	}
 
 	g.f.Type().Id(name).Index().Add(elemType)
 
@@ -80,9 +78,6 @@ func (g *Generator) generateStruct(name string, t *gomosaic.TypeInfo) {
 			}
 
 			fieldType := g.getTypeExpr(field.Type)
-			if fieldType == nil {
-				continue
-			}
 
 			if tag, err := field.Tags.Get("json"); err == nil {
 				if tag.Name == "-" {

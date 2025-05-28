@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-mosaic/gomosaic/internal/gen/structure"
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
-	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/pkg/strcase"
 	"github.com/go-mosaic/gomosaic/pkg/typetransform"
@@ -240,21 +239,6 @@ func (g *ClientGenerator) genCookieParams(methodOpt *service.MethodOpt) jen.Code
 		group.Add(cookieAdd)
 	}
 	return group
-}
-
-func (g *ClientGenerator) processType(t *gomosaic.TypeInfo) jen.Code {
-	if t.IsPtr {
-		t = t.ElemType
-	}
-
-	if t.IsNamed {
-		typeName := t.Package + "." + t.Name
-		if g.rewriteTypes[typeName] {
-			return jen.Id(t.Name)
-		}
-	}
-
-	return jenutils.TypeInfoQual(t, g.qual)
 }
 
 func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Code {
