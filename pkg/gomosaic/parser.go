@@ -273,7 +273,7 @@ type CommentInfo struct {
 func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, err error) {
 	patterns := make([]string, len(paths))
 	for i := range paths {
-		patterns[i] = "pattern=" + patterns[i]
+		patterns[i] = "pattern=" + paths[i]
 	}
 
 	cfg := &packages.Config{

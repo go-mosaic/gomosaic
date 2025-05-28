@@ -29,7 +29,7 @@ func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, type
 			continue
 		}
 
-		g := middleware.NewMiddlewareGenerator(
+		g := middleware.NewGenerator(
 			service.NameTypeInfo,
 			"Logging",
 			f.Qual,

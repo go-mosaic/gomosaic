@@ -10,7 +10,7 @@ import (
 
 type BodyFn func(group *jen.Group)
 
-type MiddlewareGenerator struct {
+type Generator struct {
 	nameTypeInfo  *gomosaic.NameTypeInfo
 	structName    string
 	constructName string
@@ -19,14 +19,14 @@ type MiddlewareGenerator struct {
 	qualFunc      jenutils.QualFunc
 }
 
-func NewMiddlewareGenerator(
+func NewGenerator(
 	nameTypeInfo *gomosaic.NameTypeInfo,
 	name string,
 	qualFunc jenutils.QualFunc,
 	params []jen.Code,
 
-) *MiddlewareGenerator {
-	return &MiddlewareGenerator{
+) *Generator {
+	return &Generator{
 		nameTypeInfo:  nameTypeInfo,
 		structName:    strcase.ToCamel(nameTypeInfo.Name) + name + "Middleware",
 		constructName: name + strcase.ToCamel(nameTypeInfo.Name) + "Middleware",
@@ -35,11 +35,11 @@ func NewMiddlewareGenerator(
 	}
 }
 
-func (g *MiddlewareGenerator) AddParam(paramName jen.Code, paramType jen.Code) {
+func (g *Generator) AddParam(paramName jen.Code, paramType jen.Code) {
 	g.params = append(g.params, paramName, paramType)
 }
 
-func (g *MiddlewareGenerator) Generate() (jen.Code, error) {
+func (g *Generator) Generate() (jen.Code, error) {
 	group := jen.NewFile("")
 
 	if g.nameTypeInfo.Type == nil || g.nameTypeInfo.Type.Interface == nil {
@@ -90,7 +90,7 @@ func (g *MiddlewareGenerator) Generate() (jen.Code, error) {
 	return group, nil
 }
 
-func (g *MiddlewareGenerator) GenerateMethod(m *gomosaic.MethodInfo, beforeNextBodyFn, afterNextBodyFn BodyFn) {
+func (g *Generator) GenerateMethod(m *gomosaic.MethodInfo, beforeNextBodyFn, afterNextBodyFn BodyFn) {
 	resultList := jen.Null()
 
 	callFunc := jen.Id("m").Dot("next").Dot(m.Name).CallFunc(func(group *jen.Group) {

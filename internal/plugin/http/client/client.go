@@ -6,7 +6,9 @@ import (
 
 	"github.com/dave/jennifer/jen"
 
+	"github.com/go-mosaic/gomosaic/internal/gen/structure"
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/pkg/strcase"
 	"github.com/go-mosaic/gomosaic/pkg/typetransform"
@@ -24,12 +26,25 @@ type Qualifier interface {
 }
 
 type ClientGenerator struct {
-	qualifier Qualifier
+	qualifier    Qualifier
+	rewriteTypes map[string]bool
 }
 
 func NewClientGenerator(qualifier Qualifier) *ClientGenerator {
 	return &ClientGenerator{
-		qualifier: qualifier,
+		qualifier:    qualifier,
+		rewriteTypes: map[string]bool{},
+	}
+}
+
+func (g *ClientGenerator) qual(pkgPath, name string) func(s *jen.Statement) {
+	return func(s *jen.Statement) {
+		typeName := pkgPath + "." + name
+		if g.rewriteTypes[typeName] {
+			s.Id(name)
+		} else {
+			g.qualifier.Qual(pkgPath, name)(s)
+		}
 	}
 }
 
@@ -38,10 +53,19 @@ func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, erro
 
 	group.Add(g.genTypes())
 
+	structGen := structure.NewGenerator(group)
+
 	for _, s := range services {
 		if len(s.Errors) > 0 {
 			group.Add(g.genErrorTypes(s))
 		}
+
+		group.Add(g.genClientDTO(structGen, s))
+	}
+
+	g.rewriteTypes = structGen.Processed()
+
+	for _, s := range services {
 		group.Add(g.genClientStruct(s))
 		group.Add(g.genClientConstruct(s))
 		group.Add(g.genClientEndpoints(s))
@@ -60,9 +84,9 @@ func (g *ClientGenerator) genReqBodyStruct(methodOpt *service.MethodOpt) jen.Cod
 		group.Return(fldParam)
 	} else {
 		if len(methodOpt.WrapReq.PathParts) > 0 {
-			group.Var().Id("body").Struct(service.WrapStruct(methodOpt.WrapReq.PathParts, service.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qualifier.Qual))).Line()
+			group.Var().Id("body").Struct(service.WrapStruct(methodOpt.WrapReq.PathParts, service.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qual))).Line()
 		} else {
-			group.Var().Id("body").Struct(service.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qualifier.Qual)).Line()
+			group.Var().Id("body").Struct(service.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qual)).Line()
 		}
 
 		for _, param := range methodOpt.BodyParams {
@@ -113,7 +137,7 @@ func (g *ClientGenerator) genJSONReqContent(methodOpt *service.MethodOpt) jen.Co
 		),
 
 		jen.Return(
-			service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+			service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 		),
 	).Line()
 	group.Id("req").Dot("Body").Op("=").Qual("io", "NopCloser").Call(jen.Op("&").Id("reqData"))
@@ -147,7 +171,7 @@ func (g *ClientGenerator) genQueryParams(methodOpt *service.MethodOpt) jen.Code 
 
 		code := typetransform.For(param.Var.Type).
 			SetValueID(paramID).
-			SetQualFunc(g.qualifier.Qual).
+			SetQualFunc(g.qual).
 			Format()
 
 		queryAdd := jen.Id("q").Dot("Add").Call(jen.Lit(param.Name), code)
@@ -174,7 +198,7 @@ func (g *ClientGenerator) genHeaderParams(methodOpt *service.MethodOpt) jen.Code
 
 		code := typetransform.For(param.Var.Type).
 			SetValueID(paramID).
-			SetQualFunc(g.qualifier.Qual).
+			SetQualFunc(g.qual).
 			Format()
 
 		headerAdd := jen.Id("req").Dot("Header").Dot("Add").Call(jen.Lit(param.Name), code)
@@ -201,7 +225,7 @@ func (g *ClientGenerator) genCookieParams(methodOpt *service.MethodOpt) jen.Code
 
 		code := typetransform.For(param.Var.Type).
 			SetValueID(paramID).
-			SetQualFunc(g.qualifier.Qual).
+			SetQualFunc(g.qual).
 			Format()
 
 		cookieAdd := jen.Id("req").Dot("AddCookie").Call(jen.Op("&").Qual(service.HTTPPkg, "Cookie").Values(
@@ -218,6 +242,21 @@ func (g *ClientGenerator) genCookieParams(methodOpt *service.MethodOpt) jen.Code
 	return group
 }
 
+func (g *ClientGenerator) processType(t *gomosaic.TypeInfo) jen.Code {
+	if t.IsPtr {
+		t = t.ElemType
+	}
+
+	if t.IsNamed {
+		typeName := t.Package + "." + t.Name
+		if g.rewriteTypes[typeName] {
+			return jen.Id(t.Name)
+		}
+	}
+
+	return jenutils.TypeInfoQual(t, g.qual)
+}
+
 func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
@@ -229,7 +268,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 		).
 		ParamsFunc(func(group *jen.Group) {
 			for _, result := range methodOpt.Func.Results {
-				group.Id(result.Name).Add(jenutils.TypeInfoQual(result.Type, g.qualifier.Qual))
+				group.Id(result.Name).Add(jenutils.TypeInfoQual(result.Type, g.qual))
 			}
 		}).
 		BlockFunc(func(group *jen.Group) {
@@ -283,7 +322,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 				),
 				jen.Return(
-					service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+					service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 				),
 			)
 
@@ -321,7 +360,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 									}
 
 									code := typetransform.For(p.Var.Type).
-										SetQualFunc(g.qualifier.Qual).
+										SetQualFunc(g.qual).
 										SetValueID(valueID).
 										Format()
 
@@ -358,7 +397,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 									}
 
 									code := typetransform.For(p.Var.Type).
-										SetQualFunc(g.qualifier.Qual).
+										SetQualFunc(g.qual).
 										SetValueID(valueID).
 										Format()
 
@@ -371,7 +410,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 											g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 										),
 										jen.Return(
-											service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+											service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 										),
 									)
 
@@ -407,7 +446,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 
 				jen.If(jen.Err().Op("!=").Nil()).Block(
 					jen.Return(
-						service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+						service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 					),
 				),
 			)
@@ -418,7 +457,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 				),
 				jen.Return(
-					service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+					service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 				),
 			)
 
@@ -441,7 +480,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					jen.Return(
 						service.MakeEmptyResults(
 							methodOpt.BodyResults,
-							g.qualifier.Qual,
+							g.qual,
 							jen.Qual(service.FmtPkg, "Errorf").Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode")),
 						)...,
 					),
@@ -462,12 +501,12 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 						jen.Err().Op(":=").Qual(service.JSONPkg, "NewDecoder").Call(jen.Id("resp").Dot("Body")).Dot("Decode").Call(jen.Op("&").Id("clientErr")),
 						jen.Id("err").Op("!=").Id("nil"),
 					).Block(
-						jen.Return(service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...),
+						jen.Return(service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...),
 					)
 
-					group.Return(service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Op("&").Id("clientErr"))...)
+					group.Return(service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Op("&").Id("clientErr"))...)
 				} else {
-					group.Id("err").Op("=").Do(g.qualifier.Qual(service.FmtPkg, "Errorf")).Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode"))
+					group.Id("err").Op("=").Do(g.qual(service.FmtPkg, "Errorf")).Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode"))
 					group.Return()
 				}
 			})
@@ -480,7 +519,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 						jen.List(jen.Id("reader"), jen.Err()).Op("=").Qual("compress/gzip", "NewReader").Call(jen.Id("resp").Dot("Body")),
 						jen.If(jen.Err().Op("!=").Nil()).Block(
 							jen.Return(
-								service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+								service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 							),
 						),
 						jen.Defer().Id("reader").Dot("Close").Call(),
@@ -488,12 +527,12 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 				)
 
 				if len(methodOpt.BodyResults) == 1 && methodOpt.Single.Resp {
-					group.Var().Id("respBody").Add(jenutils.TypeInfoQual(methodOpt.BodyResults[0].Var.Type, g.qualifier.Qual))
+					group.Var().Id("respBody").Add(jenutils.TypeInfoQual(methodOpt.BodyResults[0].Var.Type, g.qual))
 				} else {
 					if len(methodOpt.WrapResp.PathParts) > 0 {
-						group.Var().Id("respBody").Struct(service.WrapStruct(methodOpt.WrapResp.PathParts, service.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qualifier.Qual)))
+						group.Var().Id("respBody").Struct(service.WrapStruct(methodOpt.WrapResp.PathParts, service.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)))
 					} else {
-						group.Var().Id("respBody").Struct(service.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qualifier.Qual)).Line()
+						group.Var().Id("respBody").Struct(service.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)).Line()
 					}
 				}
 
@@ -506,7 +545,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 						g.genSetStatusErrorTrace(jen.Lit("failed read response")),
 					),
 					jen.Return(
-						service.MakeEmptyResults(methodOpt.BodyResults, g.qualifier.Qual, jen.Err())...,
+						service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 					),
 				)
 
@@ -567,7 +606,7 @@ func (g *ClientGenerator) genClientMethod(methodOpt *service.MethodOpt) jen.Code
 		ParamsFunc(func(group *jen.Group) {
 			for _, param := range methodOpt.Params {
 				if param.Required {
-					group.Id(strcase.ToLowerCamel(param.Var.Name)).Add(jenutils.TypeInfoQual(param.Var.Type, g.qualifier.Qual))
+					group.Id(strcase.ToLowerCamel(param.Var.Name)).Add(jenutils.TypeInfoQual(param.Var.Type, g.qual))
 				}
 			}
 		}).
@@ -590,12 +629,12 @@ func (g *ClientGenerator) genClientMethod(methodOpt *service.MethodOpt) jen.Code
 	group.Func().Params(jen.Id("c").Op("*").Id(clientName)).Id(methodOpt.Func.Name).
 		ParamsFunc(func(group *jen.Group) {
 			for _, param := range methodOpt.Func.Params {
-				group.Id(param.Name).Add(jenutils.TypeInfoQual(param.Type, g.qualifier.Qual))
+				group.Id(param.Name).Add(jenutils.TypeInfoQual(param.Type, g.qual))
 			}
 		}).
 		ParamsFunc(func(group *jen.Group) {
 			for _, result := range methodOpt.Results {
-				group.Id(strcase.ToLowerCamel(result.Var.Name)).Add(jenutils.TypeInfoQual(result.Var.Type, g.qualifier.Qual))
+				group.Id(strcase.ToLowerCamel(result.Var.Name)).Add(jenutils.TypeInfoQual(result.Var.Type, g.qual))
 			}
 		}).
 		BlockFunc(func(group *jen.Group) {
@@ -640,7 +679,7 @@ func (g *ClientGenerator) genReqStructSetters(methodOpt *service.MethodOpt) jen.
 		group.Func().Params(
 			jen.Id(recvName).Op("*").Id(methodRequestName),
 		).Id("Set" + fnName).Params(
-			jen.Id(fldName).Add(jenutils.TypeInfoQual(param.Var.Type, g.qualifier.Qual)),
+			jen.Id(fldName).Add(jenutils.TypeInfoQual(param.Var.Type, g.qual)),
 		).Op("*").Id(methodRequestName).BlockFunc(func(g *jen.Group) {
 			g.Add(jen.CustomFunc(jen.Options{}, func(g *jen.Group) {
 				g.Id(recvName).Dot("params").Dot(fldName).Op("=")
@@ -663,7 +702,7 @@ func (g *ClientGenerator) genRequestStructParam(p *service.MethodParamOpt) jen.C
 		paramNameID.Op("*")
 	}
 
-	return paramNameID.Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
+	return paramNameID.Add(jenutils.TypeInfoQual(p.Var.Type, g.qual))
 }
 
 func (g *ClientGenerator) genReqStruct(methodOpt *service.MethodOpt) jen.Code {
@@ -738,6 +777,18 @@ func (g *ClientGenerator) genClientConstruct(ifaceOpt *service.IfaceOpt) jen.Cod
 			g.Return(jen.Id("c"))
 		},
 	)
+
+	return group
+}
+
+func (g *ClientGenerator) genClientDTO(structGen *structure.Generator, ifaceOpt *service.IfaceOpt) jen.Code {
+	group := jen.NewFile("")
+
+	for _, m := range ifaceOpt.Methods {
+		for _, p := range m.BodyResults {
+			structGen.Generate(p.Var.Type)
+		}
+	}
 
 	return group
 }
