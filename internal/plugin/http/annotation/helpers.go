@@ -1,4 +1,4 @@
-package service
+package annotation
 
 import (
 	"github.com/dave/jennifer/jen"

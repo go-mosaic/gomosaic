@@ -5,7 +5,7 @@ import (
 
 	"github.com/dave/jennifer/jen"
 
-	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/pkg/strcase"
@@ -22,7 +22,7 @@ type ServerGenerator struct {
 	qualifier Qualifier
 }
 
-func (g *ServerGenerator) genServiceOptions(services []*service.IfaceOpt) jen.Code {
+func (g *ServerGenerator) genServiceOptions(services []*annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
 	for _, s := range services {
@@ -34,7 +34,7 @@ func (g *ServerGenerator) genServiceOptions(services []*service.IfaceOpt) jen.Co
 	return group
 }
 
-func (g *ServerGenerator) genTypeOptions(optionsName string, middlewareType jen.Code, methods []*service.MethodOpt) jen.Code {
+func (g *ServerGenerator) genTypeOptions(optionsName string, middlewareType jen.Code, methods []*annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	group.Type().Id(optionsName).StructFunc(func(group *jen.Group) {
@@ -66,7 +66,7 @@ func (g *ServerGenerator) genOptionLoader(ifaceName string) jen.Code {
 }
 
 func (g *ServerGenerator) genNonBodyParamsFunc(
-	params []*service.MethodParamOpt,
+	params []*annotation.MethodParamOpt,
 	valueFn func(name string) jen.Code,
 ) jen.Code {
 	group := jen.NewFile("")
@@ -95,8 +95,8 @@ func (g *ServerGenerator) genNonBodyParamsFunc(
 }
 
 func (g *ServerGenerator) genHandlerDecodeBodyParams(
-	opt *service.MethodOpt,
-	params []*service.MethodParamOpt,
+	opt *annotation.MethodOpt,
+	params []*annotation.MethodParamOpt,
 ) jen.Code {
 	group := jen.NewFile("")
 
@@ -127,10 +127,10 @@ func (g *ServerGenerator) genHandlerDecodeBodyParams(
 				if len(params) == 1 && opt.Single.Req {
 					group.Var().Id(reqName).Add(jenutils.TypeInfoQual(params[0].Var.Type, g.qualifier.Qual))
 				} else {
-					structFields := service.MakeStructFieldsFromParams(params, g.qualifier.Qual)
+					structFields := annotation.MakeStructFieldsFromParams(params, g.qualifier.Qual)
 
 					if len(opt.WrapReq.PathParts) > 0 {
-						structFields = service.WrapStruct(opt.WrapReq.PathParts, structFields)
+						structFields = annotation.WrapStruct(opt.WrapReq.PathParts, structFields)
 					}
 
 					group.Var().Id(reqName).Struct(structFields)
@@ -144,12 +144,12 @@ func (g *ServerGenerator) genHandlerDecodeBodyParams(
 					group.Id(strcase.ToLowerCamel(params[0].Var.Name)).Op("=").Id(reqName)
 				} else {
 					for _, p := range params {
-						group.Id(strcase.ToLowerCamel(p.Var.Name)).Op("=").Id(reqName).Add(service.Dot(append(opt.WrapReq.PathParts, strcase.ToCamel(p.Var.Name))...))
+						group.Id(strcase.ToLowerCamel(p.Var.Name)).Op("=").Id(reqName).Add(annotation.Dot(append(opt.WrapReq.PathParts, strcase.ToCamel(p.Var.Name))...))
 					}
 				}
 			})
 
-			if !service.IsObjectType(opt.BodyParams[0].Var.Type) {
+			if opt.Use.URLEncoded {
 				group.Case(jen.Lit("application/x-www-form-urlencoded")).BlockFunc(func(group *jen.Group) {
 					group.List(jen.Id("form"), jen.Err()).Op(":=").Id("req").Dot("URLEncodedForm").Call()
 					group.If(jen.Err().Op("!=").Nil()).Block(
@@ -172,7 +172,9 @@ func (g *ServerGenerator) genHandlerDecodeBodyParams(
 						group.Add(code)
 					}
 				})
+			}
 
+			if opt.Use.Multipart {
 				group.Case(jen.Lit("multipart/form-data")).BlockFunc(func(group *jen.Group) {
 					group.List(jen.Id("form"), jen.Err()).Op(":=").Id("req").Dot("MultipartForm").Call(jen.Lit(opt.FormMaxMemory))
 					group.If(jen.Err().Op("!=").Nil()).Block(
@@ -199,7 +201,7 @@ func (g *ServerGenerator) genHandlerDecodeBodyParams(
 	return group
 }
 
-func (g *ServerGenerator) genCallServiceMethod(m *service.MethodOpt) jen.Code {
+func (g *ServerGenerator) genCallServiceMethod(m *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	svcCall := jen.Do(func(s *jen.Statement) {
@@ -222,7 +224,7 @@ func (g *ServerGenerator) genCallServiceMethod(m *service.MethodOpt) jen.Code {
 			switch p.HTTPType {
 			default:
 				group.Id(strcase.ToLowerCamel(p.Var.Name))
-			case service.PathHTTPType, service.CookieHTTPType, service.QueryHTTPType:
+			case annotation.PathHTTPType, annotation.CookieHTTPType, annotation.QueryHTTPType:
 				group.Id("param" + strcase.ToCamel(p.Var.Name))
 			}
 		}
@@ -238,7 +240,7 @@ func (g *ServerGenerator) genCallServiceMethod(m *service.MethodOpt) jen.Code {
 	return group
 }
 
-func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
+func (g *ServerGenerator) genRegisterHandlers(s *annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
 	group.Func().Id(s.NameTypeInfo.Name+"RegisterHandlers").Params(
@@ -304,10 +306,10 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 					if len(m.BodyResults) == 1 && m.Single.Resp {
 						respName = m.BodyResults[0].Var.Name
 					} else {
-						structFields := service.MakeStructFieldsFromResults(m.BodyResults, g.qualifier.Qual)
+						structFields := annotation.MakeStructFieldsFromResults(m.BodyResults, g.qualifier.Qual)
 
 						if len(m.WrapResp.PathParts) > 0 {
-							structFields = service.WrapStruct(m.WrapResp.PathParts, structFields)
+							structFields = annotation.WrapStruct(m.WrapResp.PathParts, structFields)
 						}
 
 						group.Var().Id(respName).Struct(structFields)
@@ -336,7 +338,7 @@ func (g *ServerGenerator) genRegisterHandlers(s *service.IfaceOpt) jen.Code {
 	return group
 }
 
-func (g *ServerGenerator) Generate(services []*service.IfaceOpt) (jen.Code, error) {
+func (g *ServerGenerator) Generate(services []*annotation.IfaceOpt) (jen.Code, error) {
 	group := jen.NewFile("")
 	group.Add(g.genServiceOptions(services))
 	for _, s := range services {

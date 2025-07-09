@@ -2,28 +2,19 @@ package cmd
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
-	"github.com/fatih/color"
-	"github.com/hashicorp/go-multierror"
 	"github.com/spf13/cobra"
 
 	_ "github.com/go-mosaic/gomosaic/internal/plugin/http"
-	_ "github.com/go-mosaic/gomosaic/internal/plugin/log"
+	_ "github.com/go-mosaic/gomosaic/internal/plugin/logmiddleware"
+	_ "github.com/go-mosaic/gomosaic/internal/plugin/metricmiddleware"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 )
 
-const minArgsCount = 3
-
-var (
-	yellow = color.New(color.FgYellow).SprintFunc()
-	red    = color.New(color.FgRed).SprintFunc()
-	green  = color.New(color.FgGreen).SprintFunc()
-)
+const codegenMinArgsCount = 3
 
 func CodegenCmd(postRun ...func()) *cobra.Command {
 	var (
@@ -35,17 +26,15 @@ func CodegenCmd(postRun ...func()) *cobra.Command {
 				"gomosaic codegen http-server ./internal/server",
 				"",
 				"Параметры:",
-				"",
 				"  name: Имя раширения которое будет генерировать код.",
 				"  packages: Список пакетов в которых необходимо искать интерфейсы и структуры для генерации кода.",
 				"  outputDir: Директория, в которую будет сохранен сгенерированный код.",
 				"",
 				"Флаги (опционально):",
-				"",
 				"  --modfile:  Путь к файлу go.mod для генерации кода (при запуске из под корня проекта флаг можно не указывать).",
 			),
 			Args: func(cmd *cobra.Command, args []string) error {
-				if len(args) < minArgsCount {
+				if len(args) < codegenMinArgsCount {
 					return fmt.Errorf("не верные аргументы")
 				}
 
@@ -117,50 +106,4 @@ func CodegenCmd(postRun ...func()) *cobra.Command {
 
 	cobra.CheckErr(cmd.Flags().MarkHidden("modfile"))
 	return cmd
-}
-
-func printError(cmd *cobra.Command, err error) {
-	var isExitApp bool
-
-	if err != nil {
-		var merr *multierror.Error
-		if errors.As(err, &merr) {
-			merr.ErrorFormat = func(es []error) string {
-				errorPoints := make([]string, 0, len(es))
-				warningPoints := make([]string, 0, len(es))
-				for _, err := range es {
-					if gomosaic.IsErrWarning(err) {
-						warningPoints = append(warningPoints, fmt.Sprintf("* %s", yellow(err)))
-					} else {
-						isExitApp = true
-						errorPoints = append(errorPoints, fmt.Sprintf("* %s", red(err)))
-					}
-				}
-				var text string
-				if len(errorPoints) > 0 {
-					text += fmt.Sprintf(
-						"\n\n%d ошибки:\n\t%s\n\n",
-						len(errorPoints), strings.Join(errorPoints, "\n\t"))
-				}
-				if len(warningPoints) > 0 {
-					text += fmt.Sprintf(
-						"\n\n%d предупреждения:\n\t%s\n\n",
-						len(warningPoints), strings.Join(warningPoints, "\n\t"))
-				}
-				return text
-			}
-		}
-		cmd.Println(err)
-	}
-
-	if isExitApp {
-		os.Exit(1)
-	}
-}
-
-func examples(ex ...string) string {
-	for i := range ex {
-		ex[i] = "  " + ex[i]
-	}
-	return strings.Join(ex, "\n")
 }

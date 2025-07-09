@@ -1,0 +1,428 @@
+<!doctype html>
+<html lang="ru" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Справочник аннотаций API</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              dark: {
+                800: "#0f172a",
+                700: "#1e293b",
+                600: "#334155",
+                500: "#475569",
+              },
+              primary: {
+                dark: "#1e40af",
+                light: "#3b82f6",
+              },
+            },
+            animation: {
+              "fade-in": "fadeIn 0.3s ease-in-out",
+            },
+            keyframes: {
+              fadeIn: {
+                "0%": { opacity: "0", transform: "translateY(10px)" },
+                "100%": { opacity: "1", transform: "translateY(0)" },
+              },
+            },
+          },
+        },
+      };
+    </script>
+    <style>
+      .annotation-card {
+        @apply rounded-xl overflow-hidden border border-gray-200 dark:border-dark-600;
+        box-shadow:
+          0 10px 15px -3px rgba(0, 0, 0, 0.05),
+          0 4px 6px -2px rgba(0, 0, 0, 0.025);
+      }
+
+      .param-table {
+        @apply w-full;
+        border-spacing: 0;
+      }
+
+      .param-table thead {
+        @apply sticky top-0;
+      }
+
+      .param-table th {
+        @apply text-left py-3 px-4 font-medium text-sm uppercase tracking-wider;
+        background: linear-gradient(to bottom, #f8fafc, #f1f5f9);
+        color: #64748b;
+      }
+
+      .dark .param-table th {
+        background: linear-gradient(to bottom, #1e293b, #0f172a);
+        color: #94a3b8;
+      }
+
+      .param-table tr {
+        @apply transition-all duration-150;
+      }
+
+      .param-table tr:hover {
+        @apply bg-gray-50 dark:bg-dark-600/50;
+      }
+
+      .param-table td {
+        @apply py-3 px-4 border-t border-gray-100 dark:border-dark-600 text-sm;
+      }
+
+      .param-table tr:first-child td {
+        @apply border-t-0;
+      }
+
+      .required-true {
+        @apply bg-red-100 text-red-800 dark:bg-red-900/20 dark:text-red-400 px-2 py-1 rounded-full text-xs font-medium;
+      }
+
+      .required-false {
+        @apply bg-green-100 text-green-800 dark:bg-green-900/20 dark:text-green-400 px-2 py-1 rounded-full text-xs font-medium;
+      }
+
+      .type-string {
+        @apply bg-blue-100 text-blue-800 dark:bg-blue-900/20 dark:text-blue-400 px-2 py-1 rounded-full text-xs font-mono;
+      }
+
+      .type-bool {
+        @apply bg-purple-100 text-purple-800 dark:bg-purple-900/20 dark:text-purple-400 px-2 py-1 rounded-full text-xs font-mono;
+      }
+
+      .type-number {
+        @apply bg-yellow-100 text-yellow-800 dark:bg-yellow-900/20 dark:text-yellow-400 px-2 py-1 rounded-full text-xs font-mono;
+      }
+    </style>
+  </head>
+  <body
+    class="bg-white dark:bg-dark-800 text-gray-800 dark:text-gray-200 transition-colors duration-200"
+  >
+    <div class="container mx-auto px-4 py-8 max-w-5xl">
+      <!-- Шапка -->
+      <header class="flex justify-between items-center mb-8">
+        <h1
+          class="text-3xl font-bold text-primary-dark dark:text-primary-light bg-clip-text text-transparent bg-gradient-to-r from-primary-dark to-blue-600 dark:from-primary-light dark:to-blue-400"
+        >
+          Справочник аннотаций
+        </h1>
+        <button
+          onclick="toggleDarkMode()"
+          class="p-2 rounded-full hover:bg-gray-200 dark:hover:bg-dark-600 transition-colors"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            class="h-6 w-6 text-gray-600 dark:text-gray-300"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"
+            />
+          </svg>
+        </button>
+      </header>
+
+      <!-- Поиск -->
+      <div class="mb-8 relative">
+        <input
+          type="text"
+          placeholder="Поиск аннотаций..."
+          class="w-full px-4 py-3 rounded-lg border border-gray-300 dark:border-dark-600 bg-white dark:bg-dark-700 focus:outline-none focus:ring-2 focus:ring-primary-light transition-all pl-10"
+        />
+        <svg
+          class="absolute left-3 top-3.5 h-5 w-5 text-gray-400 dark:text-gray-500"
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 20 20"
+          fill="currentColor"
+        >
+          <path
+            fill-rule="evenodd"
+            d="M8 4a4 4 0 100 8 4 4 0 000-8zM2 8a6 6 0 1110.89 3.476l4.817 4.817a1 1 0 01-1.414 1.414l-4.816-4.816A6 6 0 012 8z"
+            clip-rule="evenodd"
+          />
+        </svg>
+      </div>
+
+      <!-- Секция аннотаций -->
+      <div class="space-y-8">
+        <!-- Аннотация @route -->
+        <div class="annotation-card animate-fade-in">
+          <div
+            class="px-6 py-4 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900/30 dark:to-blue-800/20"
+          >
+            <div class="flex items-center">
+              <div class="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/40 mr-4">
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-6 w-6 text-blue-600 dark:text-blue-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 10V3L4 14h7v7l9-11h-7z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h2 class="text-xl font-bold text-blue-700 dark:text-blue-400">
+                  @route
+                </h2>
+                <p class="text-sm text-blue-600 dark:text-blue-300">
+                  Определение HTTP-эндпоинтов
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="px-6 py-4 bg-white dark:bg-dark-700">
+            <div class="mb-6 text-gray-600 dark:text-gray-300">
+              <p>
+                Определяет HTTP-эндпоинт для обработчика. Должна располагаться
+                непосредственно перед объявлением функции.
+              </p>
+            </div>
+
+            <div class="mb-8">
+              <div class="flex items-center mb-4">
+                <h3
+                  class="text-lg font-semibold text-gray-800 dark:text-gray-200"
+                >
+                  Параметры
+                </h3>
+                <span
+                  class="ml-2 bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-400 text-xs px-2 py-1 rounded-full"
+                  >2 обязательных</span
+                >
+              </div>
+
+              <div
+                class="border border-gray-200 dark:border-dark-600 rounded-lg overflow-hidden"
+              >
+                <table class="param-table w-full">
+                  <thead>
+                    <tr>
+                      <th class="w-1/4">Параметр</th>
+                      <th class="w-1/4">Тип</th>
+                      <th class="w-1/4">Обязательный</th>
+                      <th class="w-2/4">Описание</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="font-mono font-medium">HTTP_МЕТОД</td>
+                      <td><span class="type-string">string</span></td>
+                      <td><span class="required-true">Да</span></td>
+                      <td>HTTP метод (GET, POST, PUT, DELETE и т.д.)</td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono font-medium">путь</td>
+                      <td><span class="type-string">string</span></td>
+                      <td><span class="required-true">Да</span></td>
+                      <td>Шаблон URL пути (например /users/{id})</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div class="mb-8">
+              <div class="flex items-center mb-4">
+                <h3
+                  class="text-lg font-semibold text-gray-800 dark:text-gray-200"
+                >
+                  Флаги
+                </h3>
+                <span
+                  class="ml-2 bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-400 text-xs px-2 py-1 rounded-full"
+                  >Опциональные</span
+                >
+              </div>
+
+              <div
+                class="border border-gray-200 dark:border-dark-600 rounded-lg overflow-hidden"
+              >
+                <table class="param-table w-full">
+                  <thead>
+                    <tr>
+                      <th class="w-1/4">Флаг</th>
+                      <th class="w-1/4">Тип</th>
+                      <th class="w-1/4">По умолчанию</th>
+                      <th class="w-2/4">Описание</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr>
+                      <td class="font-mono font-medium">middleware</td>
+                      <td><span class="type-string">string[]</span></td>
+                      <td class="font-mono text-gray-500">-</td>
+                      <td>
+                        Список промежуточного ПО для применения (через запятую)
+                      </td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono font-medium">cache</td>
+                      <td><span class="type-string">duration</span></td>
+                      <td class="font-mono text-gray-500">-</td>
+                      <td>Время кеширования ответа (например 5m, 1h)</td>
+                    </tr>
+                    <tr>
+                      <td class="font-mono font-medium">rate_limit</td>
+                      <td><span class="type-string">string</span></td>
+                      <td class="font-mono text-gray-500">-</td>
+                      <td>Лимит запросов (например "100/1m")</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div>
+              <h3
+                class="text-lg font-semibold mb-3 text-gray-800 dark:text-gray-200"
+              >
+                Примеры использования
+              </h3>
+              <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div class="bg-gray-50 dark:bg-dark-600 p-4 rounded-lg">
+                  <div
+                    class="font-mono text-sm text-blue-600 dark:text-blue-400"
+                  >
+                    <div>// @route GET /users/{id}</div>
+                    <div class="mt-1 text-gray-500 dark:text-gray-400 text-xs">
+                      Базовый пример
+                    </div>
+                  </div>
+                </div>
+                <div class="bg-gray-50 dark:bg-dark-600 p-4 rounded-lg">
+                  <div
+                    class="font-mono text-sm text-blue-600 dark:text-blue-400"
+                  >
+                    <div>// @route POST /users</div>
+                    <div>// middleware=auth,json</div>
+                    <div>// cache=10m</div>
+                    <div class="mt-1 text-gray-500 dark:text-gray-400 text-xs">
+                      С флагами
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Аннотация @param -->
+        <div class="annotation-card animate-fade-in">
+          <div
+            class="px-6 py-4 bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/30 dark:to-green-800/20"
+          >
+            <div class="flex items-center">
+              <div
+                class="p-2 rounded-lg bg-green-100 dark:bg-green-900/40 mr-4"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-6 w-6 text-green-600 dark:text-green-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h2
+                  class="text-xl font-bold text-green-700 dark:text-green-400"
+                >
+                  @param
+                </h2>
+                <p class="text-sm text-green-600 dark:text-green-300">
+                  Описание параметров
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Аналогичное улучшенное содержимое для @param -->
+          <!-- ... -->
+        </div>
+
+        <!-- Аннотация @validate -->
+        <div class="annotation-card animate-fade-in">
+          <div
+            class="px-6 py-4 bg-gradient-to-r from-yellow-50 to-yellow-100 dark:from-yellow-900/30 dark:to-yellow-800/20"
+          >
+            <div class="flex items-center">
+              <div
+                class="p-2 rounded-lg bg-yellow-100 dark:bg-yellow-900/40 mr-4"
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  class="h-6 w-6 text-yellow-600 dark:text-yellow-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    stroke-width="2"
+                    d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+                  />
+                </svg>
+              </div>
+              <div>
+                <h2
+                  class="text-xl font-bold text-yellow-700 dark:text-yellow-400"
+                >
+                  @validate
+                </h2>
+                <p class="text-sm text-yellow-600 dark:text-yellow-300">
+                  Правила валидации
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <!-- Аналогичное улучшенное содержимое для @validate -->
+          <!-- ... -->
+        </div>
+      </div>
+    </div>
+
+    <script>
+      function toggleDarkMode() {
+        document.documentElement.classList.toggle("dark");
+        localStorage.setItem(
+          "darkMode",
+          document.documentElement.classList.contains("dark"),
+        );
+      }
+
+      // Проверяем сохраненную тему
+      if (localStorage.getItem("darkMode") === "true") {
+        document.documentElement.classList.add("dark");
+      } else {
+        document.documentElement.classList.remove("dark");
+      }
+    </script>
+  </body>
+</html>

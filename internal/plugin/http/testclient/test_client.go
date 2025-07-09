@@ -7,7 +7,7 @@ import (
 	"github.com/dave/jennifer/jen"
 	"github.com/jaswdr/faker/v2"
 
-	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
 	"github.com/go-mosaic/gomosaic/pkg/flatten"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/pkg/jenutils"
@@ -95,7 +95,7 @@ func (g *ClientTestGenerator) typeToValue(typeInfo *gomosaic.TypeInfo) jen.Code 
 	panic(fmt.Sprintf("unreachable %s", typeInfo.Name))
 }
 
-func (g *ClientTestGenerator) genServerResponseGenerate(cfg Config, methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientTestGenerator) genServerResponseGenerate(cfg Config, methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("").Null()
 
 	if !cfg.CheckError && len(methodOpt.BodyResults) > 0 {
@@ -122,7 +122,7 @@ func (g *ClientTestGenerator) genServerResponseGenerate(cfg Config, methodOpt *s
 	return group
 }
 
-func (g *ClientTestGenerator) genBodyParamsGenerate(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientTestGenerator) genBodyParamsGenerate(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("").Null()
 
 	if len(methodOpt.BodyParams) > 0 {
@@ -158,14 +158,14 @@ func (g *ClientTestGenerator) genBodyParamsGenerate(methodOpt *service.MethodOpt
 	return group
 }
 
-func (g *ClientTestGenerator) genParamsGenerate(params []*service.MethodParamOpt) jen.Code {
+func (g *ClientTestGenerator) genParamsGenerate(params []*annotation.MethodParamOpt) jen.Code {
 	group := jen.NewFile("").Null()
 
 	for _, p := range params {
 		if p.Var.IsContext {
 			continue
 		}
-		if p.HTTPType == service.BodyHTTPType {
+		if p.HTTPType == annotation.BodyHTTPType {
 			continue
 		}
 		postfix := strcase.ToCamel(p.HTTPType)
@@ -175,7 +175,7 @@ func (g *ClientTestGenerator) genParamsGenerate(params []*service.MethodParamOpt
 	return group
 }
 
-func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt, errorWrapperName string, cfg Config) jen.Code {
+func (g ClientTestGenerator) genMockServerGenerate(methodOpt *annotation.MethodOpt, errorWrapperName string, cfg Config) jen.Code {
 	group := jen.NewFile("").Null()
 
 	pathParts := strings.Split(methodOpt.Path, "/")
@@ -209,7 +209,7 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 						bodyVar = jen.Op("&").Id("body")
 					}
 
-					group.Id("_").Op("=").Qual(service.JSONPkg, "NewDecoder").Call(jen.Id("r").Dot("Body")).Dot("Decode").Call(bodyVar)
+					group.Id("_").Op("=").Qual(annotation.JSONPkg, "NewDecoder").Call(jen.Id("r").Dot("Body")).Dot("Decode").Call(bodyVar)
 
 					for _, p := range methodOpt.BodyParams {
 						typeInfo := p.Var.Type
@@ -289,11 +289,11 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 				}
 
 				for _, p := range methodOpt.Params {
-					if p.HTTPType == service.BodyHTTPType {
+					if p.HTTPType == annotation.BodyHTTPType {
 						continue
 					}
 					switch p.HTTPType {
-					case service.PathHTTPType:
+					case annotation.PathHTTPType:
 						paramID := jen.Id(strcase.ToLowerCamel(p.Var.Name) + "PathReq")
 						group.Var().Add(paramID).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualFn))
 
@@ -310,7 +310,7 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 						group.If(jen.Id(strcase.ToLowerCamel(p.Var.Name) + "Path").Op("!=").Add(paramID).BlockFunc(func(group *jen.Group) {
 							group.Id("t").Dot("Fatal").Call(jen.Lit("failed equal method " + methodOpt.Func.ShortName + " " + strcase.ToLowerCamel(p.Var.Name)))
 						}))
-					case service.QueryHTTPType:
+					case annotation.QueryHTTPType:
 						paramID := jen.Id(strcase.ToLowerCamel(p.Var.Name) + "QueryReq")
 						group.Var().Add(paramID).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualFn))
 
@@ -327,7 +327,7 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 						group.If(jen.Id(strcase.ToLowerCamel(p.Var.Name) + "Query").Op("!=").Add(paramID).BlockFunc(func(group *jen.Group) {
 							group.Id("t").Dot("Fatal").Call(jen.Lit("failed equal method " + methodOpt.Func.ShortName + " " + strcase.ToLowerCamel(p.Var.Name)))
 						}))
-					case service.HeaderHTTPType:
+					case annotation.HeaderHTTPType:
 						paramID := jen.Id(strcase.ToLowerCamel(p.Var.Name) + "HeaderReq")
 						group.Var().Add(paramID).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualFn))
 
@@ -366,7 +366,7 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *service.MethodOpt,
 	return group
 }
 
-func (g *ClientTestGenerator) genCheckError(methodOpt *service.MethodOpt, cfg Config) jen.Code {
+func (g *ClientTestGenerator) genCheckError(methodOpt *annotation.MethodOpt, cfg Config) jen.Code {
 	group := jen.NewFile("").Null()
 
 	if _, ok := gomosaic.HasError(methodOpt.Func.Results); !ok {
@@ -387,7 +387,7 @@ func (g *ClientTestGenerator) genCheckError(methodOpt *service.MethodOpt, cfg Co
 	return group
 }
 
-func (g *ClientTestGenerator) genCheckBodyResult(methodOpt *service.MethodOpt, cfg Config) jen.Code {
+func (g *ClientTestGenerator) genCheckBodyResult(methodOpt *annotation.MethodOpt, cfg Config) jen.Code {
 	group := jen.NewFile("")
 
 	if cfg.CheckError || len(methodOpt.BodyResults) == 0 {
@@ -435,7 +435,7 @@ func (g *ClientTestGenerator) genCheckBodyResult(methodOpt *service.MethodOpt, c
 	return group
 }
 
-func (g *ClientTestGenerator) Generate(ifaceOpts []*service.IfaceOpt, configs []Config) jen.Code {
+func (g *ClientTestGenerator) Generate(ifaceOpts []*annotation.IfaceOpt, configs []Config) jen.Code {
 	group := jen.NewFile("")
 
 	group.Func().Id("ptr").Types(jen.Id("T").Any()).Params(jen.Id("t").Id("T")).Op("*").Id("T").Block(
@@ -499,15 +499,15 @@ func (g *ClientTestGenerator) Generate(ifaceOpts []*service.IfaceOpt, configs []
 							}
 							name := strcase.ToLowerCamel(p.Var.Name)
 							switch p.HTTPType {
-							case service.HeaderHTTPType:
+							case annotation.HeaderHTTPType:
 								group.Id(name + "Header")
-							case service.CookieHTTPType:
+							case annotation.CookieHTTPType:
 								group.Id(name + "Cookie")
-							case service.QueryHTTPType:
+							case annotation.QueryHTTPType:
 								group.Id(name + "Query")
-							case service.BodyHTTPType:
+							case annotation.BodyHTTPType:
 								group.Id("serverRequest").Dot(strcase.ToCamel(name))
-							case service.PathHTTPType:
+							case annotation.PathHTTPType:
 								group.Id(name + "Path")
 							}
 						}

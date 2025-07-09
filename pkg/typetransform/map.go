@@ -1,6 +1,8 @@
 package typetransform
 
 import (
+	"fmt"
+
 	"github.com/dave/jennifer/jen"
 
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
@@ -12,9 +14,9 @@ var _ Parser = &MapTypeParse{}
 type MapTypeParse struct{}
 
 func (s *MapTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.TypeInfo, errorStatements []jen.Code, qualFn jenutils.QualFunc) (code jen.Code) {
-	switch typeInfo.BasicInfo {
+	switch typeInfo.ElemType.BasicInfo {
 	default:
-		panic("unknown map basic type")
+		panic("unknown map basic type: " + fmt.Sprint(typeInfo.BasicInfo))
 	case gomosaic.IsInteger:
 		code = jen.Qual(ggRuntimePkg, "SplitKeyValInt").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(10), jen.Lit(64), jen.Op("&").Add(assignID)) //nolint: mnd
 	case gomosaic.IsInteger | gomosaic.IsUnsigned:
@@ -23,6 +25,8 @@ func (s *MapTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.Type
 		code = jen.Qual(ggRuntimePkg, "SplitKeyValFloat").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(64), jen.Op("&").Add(assignID)) //nolint: mnd
 	case gomosaic.IsString:
 		code = jen.Qual(ggRuntimePkg, "SplitKeyValString").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Op("&").Add(assignID))
+	case gomosaic.IsBoolean:
+		code = jen.Qual(ggRuntimePkg, "SplitKeyValBool").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Op("&").Add(assignID))
 	}
 
 	return jen.If(jen.Err().Op(":=").Add(code), jen.Err().Op("!=").Nil()).Block(errorStatements...)

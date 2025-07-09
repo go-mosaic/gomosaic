@@ -2,7 +2,8 @@ package gomosaic
 
 const (
 	TransportPkg = "github.com/go-mosaic/runtime/transport"
-	LogPkg       = "github.com/go-mosaic/runtime/log"
+	SpanPkg      = "github.com/go-mosaic/runtime/span"
+	ClientPkg    = "github.com/go-mosaic/runtime/client"
 	RuntimePkg   = "github.com/go-mosaic/runtime"
 )
 

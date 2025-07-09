@@ -13,6 +13,7 @@ func Run(version string) {
 	cmd := &cobra.Command{Use: "gomosaic"}
 	cmd.AddCommand(
 		basecmd.CodegenCmd(),
+		basecmd.DocgenCmd(),
 	)
 	cobra.CheckErr(cmd.Execute())
 }

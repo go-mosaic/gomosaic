@@ -12,7 +12,6 @@ import (
 	"golang.org/x/exp/constraints"
 
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
-	"github.com/go-mosaic/gomosaic/pkg/strcase"
 )
 
 type InvalidUnmarshalError struct {
@@ -111,7 +110,7 @@ func (d *decodeState) unmarshal(path, prefix string, t reflect.Type, rv reflect.
 			switch fieldType.Type.Elem().Kind() {
 			default:
 				if tagExists {
-					options := []string{t.Value()}
+					options := []string{}
 					options = append(options, t.Options...)
 					fieldValue, err := parseValues(fieldType.Type.Elem(), options)
 					if err != nil {
@@ -133,6 +132,8 @@ func (d *decodeState) unmarshal(path, prefix string, t reflect.Type, rv reflect.
 }
 
 func (d *decodeState) validateValue(v reflect.Value, field reflect.StructField, t *gomosaic.AnnotationInfo) {
+	defaultValue, _ := field.Tag.Lookup("default")
+
 	validTag, ok := field.Tag.Lookup("valid")
 	if !ok {
 		return
@@ -140,12 +141,17 @@ func (d *decodeState) validateValue(v reflect.Value, field reflect.StructField, 
 	if tag := tagparser.Parse(validTag); tag != nil {
 		switch tag.Name {
 		case "required":
-			if isEmptyValue(v) {
+			if v.IsZero() {
 				d.errs = multierror.Append(d.errs, fmt.Errorf("%s is required: %s", t.Key, t.Position))
 			}
 		case "in":
+			value := v.Interface()
+			if v.IsZero() {
+				value = defaultValue
+			}
+
 			params := strings.Split(tag.Options["params"], " ")
-			if isEmptyValue(v) || !isIn(v, params...) {
+			if !isIn(value, params...) {
 				d.errs = multierror.Append(d.errs, fmt.Errorf("%s valid only params (%s): %s", t.Key, tag.Options["params"], t.Position))
 			}
 		}
@@ -213,32 +219,6 @@ func (d *decodeState) newInlineElem(path string, tag *gomosaic.AnnotationInfo, t
 	}
 
 	return newVal, nil
-}
-
-func hasInlineOption(options []string) bool {
-	return slices.Contains(options, "inline")
-}
-
-func parseTag(fieldType reflect.StructField) (name string, options []string, ok bool) {
-	tagValue, ok := fieldType.Tag.Lookup("option")
-	if !ok {
-		return "", nil, false
-	}
-	name, options = parseTagValue(fieldType.Name, tagValue)
-	return name, options, true
-}
-
-func parseTagValue(fieldName string, tagValue string) (name string, options []string) {
-	tagParts := strings.Split(tagValue, ",")
-	if len(tagParts) > 0 {
-		name = tagParts[0]
-		options = tagParts[1:]
-		if name == "" {
-			name = strcase.ToKebab(fieldName)
-		}
-		return name, options
-	}
-	return "", nil
 }
 
 func parseValues(t reflect.Type, elems []string) (any, error) {

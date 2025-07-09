@@ -5,28 +5,41 @@ import (
 
 	"github.com/dave/jennifer/jen"
 
-	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
+	"github.com/go-mosaic/gomosaic/pkg/strcase"
 )
 
-func errorTypeName(ifaceOpt *service.IfaceOpt) string {
-	return ifaceOpt.NameTypeInfo.Name + "Error"
+func fullPrefixLowerCamel(methodOpt *annotation.MethodOpt) string {
+	return strcase.ToLowerCamel(methodOpt.Iface.NameTypeInfo.Name) + methodOpt.Func.Name
 }
 
-func clientStructName(ifaceOpt *service.IfaceOpt) string {
+func fullPrefixCamel(methodOpt *annotation.MethodOpt) string {
+	return strcase.ToCamel(methodOpt.Iface.NameTypeInfo.Name) + methodOpt.Func.Name
+}
+
+func constShortName(methodOpt *annotation.MethodOpt) string {
+	return fullPrefixLowerCamel(methodOpt) + "ShortName"
+}
+
+func constFullName(methodOpt *annotation.MethodOpt) string {
+	return fullPrefixLowerCamel(methodOpt) + "FullName"
+}
+
+func clientStructName(ifaceOpt *annotation.IfaceOpt) string {
 	return ifaceOpt.NameTypeInfo.Name + "Client"
 }
 
-func methodRequestName(methodOpt *service.MethodOpt) string {
-	return methodOpt.Iface.NameTypeInfo.Name + methodOpt.Func.Name + "Request"
+func methodRequestName(methodOpt *annotation.MethodOpt) string {
+	return fullPrefixCamel(methodOpt) + "Request"
 }
 
-func methodMakeRequestName(methodOpt *service.MethodOpt) string {
+func methodMakeRequestName(methodOpt *annotation.MethodOpt) string {
 	return methodOpt.Func.Name + "Request"
 }
 
-func sprintfPath(methodOpt *service.MethodOpt) string {
-	pathParamsMap := make(map[string]*service.MethodParamOpt, len(methodOpt.PathParams))
+func sprintfPath(methodOpt *annotation.MethodOpt) string {
+	pathParamsMap := make(map[string]*annotation.MethodParamOpt, len(methodOpt.PathParams))
 	for _, param := range methodOpt.PathParams {
 		pathParamsMap[param.Name] = param
 	}
@@ -46,7 +59,7 @@ func sprintfPath(methodOpt *service.MethodOpt) string {
 	return strings.Join(parts, "/")
 }
 
-func pathParts(methodOpt *service.MethodOpt, fn func(name string) string) []string {
+func pathParts(methodOpt *annotation.MethodOpt, fn func(name string) string) []string {
 	pathParts := strings.Split(methodOpt.Path, "/")
 	for i := range pathParts {
 		s := pathParts[i]
@@ -59,5 +72,5 @@ func pathParts(methodOpt *service.MethodOpt, fn func(name string) string) []stri
 }
 
 func wrapIOCloser(code jen.Code) jen.Code {
-	return jen.Qual(service.IOPkg, "NopCloser").Call(code)
+	return jen.Qual(annotation.IOPkg, "NopCloser").Call(code)
 }

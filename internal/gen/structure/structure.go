@@ -9,6 +9,8 @@ import (
 var knownImports = map[string]bool{
 	"time.Time":                   true,
 	"github.com/google/uuid.UUID": true,
+	"encoding/json.Number":        true,
+	"encoding/json.RawMessage":    true,
 }
 
 type Generator struct {
@@ -28,7 +30,7 @@ func (g *Generator) Generate(t *gomosaic.TypeInfo) {
 }
 
 func (g *Generator) generateType(t *gomosaic.TypeInfo) {
-	if t.IsPtr {
+	if t.IsPtr || t.IsMap || t.IsSlice {
 		t = t.ElemType
 	}
 
@@ -38,7 +40,7 @@ func (g *Generator) generateType(t *gomosaic.TypeInfo) {
 
 	processedKey := t.Package + "." + t.Name
 
-	if g.processed[processedKey] {
+	if g.processed[processedKey] || knownImports[processedKey] {
 		return
 	}
 

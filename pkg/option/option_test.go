@@ -2,6 +2,7 @@ package option
 
 import (
 	"go/token"
+	"reflect"
 	"testing"
 
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
@@ -9,12 +10,12 @@ import (
 
 type OpenAPI struct {
 	Test    string          `option:"name" valid:"required"`
-	Headers []OpenapiHeader `option:"header,inline"`
+	Headers []OpenAPIHeader `option:"header,inline"`
 	Tags    []string        `option:"tags"`
 	Ints    []int           `option:"ints"`
 }
 
-type OpenapiHeader struct {
+type OpenAPIHeader struct {
 	Name     string `option:",fromValue" valid:"required"`
 	Title    string `option:"title,fromParam"`
 	Required bool   `option:",fromOption"`
@@ -27,7 +28,8 @@ type ErrorWrapper struct {
 
 type testOption struct {
 	Name         string       `option:"" valid:"in,params:'complex value'"`
-	ApiDocEnable bool         `option:"api-doc"`
+	Foo          string       `option:"" valid:"in,params:'foo bar baz'" default:"baz"`
+	ApiDocEnable bool         `option:"api-doc,asFlag"`
 	OpenAPI      OpenAPI      `option:"openapi"`
 	ErrorWrapper ErrorWrapper `option:"error-wrapper,inline"`
 }
@@ -37,6 +39,7 @@ func TestUnmarshal(t *testing.T) {
 		prefix   string
 		comments []*gomosaic.CommentInfo
 		v        any
+		want     any
 	}
 	tests := []struct {
 		name    string
@@ -59,39 +62,66 @@ func TestUnmarshal(t *testing.T) {
 						Position:     token.Position{},
 					},
 					{
+						Value:        "@http-foo",
+						IsAnnotation: true,
+						Position:     token.Position{},
+					},
+					{
 						Value:        "@http-openapi-name name",
 						IsAnnotation: true,
 						Position:     token.Position{},
 					},
 					{
-						Value:        "@http-openapi-tags tag1,tag2,tag3",
+						Value:        "@http-openapi-tags tag1 tag2 tag3",
 						IsAnnotation: true,
 						Position:     token.Position{},
 					},
 					{
-						Value:        "@http-openapi-ints 1,2,3,4,5",
+						Value:        "@http-openapi-ints 1 2 3 4 5",
 						IsAnnotation: true,
 						Position:     token.Position{},
 					},
 					{
-						Value:        "@http-openapi-header name,required,title=\"oh no\"",
+						Value:        "@http-openapi-header name required title=\"oh no\"",
 						IsAnnotation: true,
 						Position:     token.Position{},
 					},
 					{
-						Value:        "@http-openapi-header name2,name=test,title=\"oh no 2\"",
+						Value:        "@http-openapi-header name2 name=test title=\"oh no 2\"",
 						IsAnnotation: true,
 						Position:     token.Position{},
 					},
 					{
-						Value:        "@http-error-wrapper test,iface=test",
+						Value:        "@http-error-wrapper test iface=test",
 						IsAnnotation: true,
 						Position:     token.Position{},
 					},
 				},
-				v: &testOption{
-					Name:         "",
-					ApiDocEnable: false,
+				v: &testOption{},
+				want: &testOption{
+					Name:         "complex",
+					ApiDocEnable: true,
+					OpenAPI: OpenAPI{
+						Test: "name",
+						Tags: []string{"tag1", "tag2", "tag3"},
+						Ints: []int{1, 2, 3, 4, 5},
+						Headers: []OpenAPIHeader{
+							{
+								Name:     "name",
+								Required: true,
+								Title:    "oh no",
+							},
+							{
+								Name:     "name2",
+								Required: false,
+								Title:    "oh no 2",
+							},
+						},
+					},
+					ErrorWrapper: ErrorWrapper{
+						Path:          "test",
+						InterfaceName: "test",
+					},
 				},
 			},
 			wantErr: false,
@@ -103,8 +133,13 @@ func TestUnmarshal(t *testing.T) {
 			if err != nil {
 				t.Errorf("ParseTags() error = %v", err)
 			}
+
 			if err := Unmarshal(tt.args.prefix, tags, tt.args.v); (err != nil) != tt.wantErr {
 				t.Errorf("Unmarshal() error = %v, wantErr %v", err, tt.wantErr)
+			}
+
+			if !reflect.DeepEqual(tt.args.v, tt.args.want) {
+				t.Errorf("Unmarshal() got = %v, want %v", tt.args.v, tt.args.want)
 			}
 		})
 	}

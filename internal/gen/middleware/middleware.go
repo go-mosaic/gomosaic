@@ -46,18 +46,15 @@ func (g *Generator) Generate() (jen.Code, error) {
 		return group.Null(), nil
 	}
 
-	middlewareTypeName := g.nameTypeInfo.Name + "Middleware"
-	ifaceType := jen.Qual(g.nameTypeInfo.Package.Path, g.nameTypeInfo.Name)
+	ifaceType := jen.Do(g.qualFunc(g.nameTypeInfo.Package.Path, g.nameTypeInfo.Name))
 
 	group.Type().Id(g.structName).StructFunc(func(group *jen.Group) {
-		group.Id("next").Qual(g.nameTypeInfo.Package.Path, g.nameTypeInfo.Name)
+		group.Id("next").Do(g.qualFunc(g.nameTypeInfo.Package.Path, g.nameTypeInfo.Name))
 
 		for i := 0; i < len(g.params); i += 2 {
 			group.Add(g.params[i]).Add(g.params[i+1])
 		}
 	})
-
-	group.Type().Id(middlewareTypeName).Op("=").Qual(gomosaic.RuntimePkg, "Middleware").Index(ifaceType)
 
 	structValues := jen.Dict{
 		jen.Id("next"): jen.Id("next"),
@@ -74,7 +71,7 @@ func (g *Generator) Generate() (jen.Code, error) {
 				group.Add(g.params[i]).Add(g.params[i+1])
 			}
 		}).
-		Id(middlewareTypeName).
+		Do(g.qualFunc(gomosaic.RuntimePkg, "Middleware")).Index(ifaceType).
 		Block(
 			jen.Return(
 				jen.Func().Params(jen.Id("next").Add(ifaceType)).Add(ifaceType).Block(

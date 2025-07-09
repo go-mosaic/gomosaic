@@ -6,7 +6,7 @@ import (
 
 	"github.com/jaswdr/faker/v2"
 
-	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/testclient"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 )
@@ -18,7 +18,7 @@ func (p *PluginClientTesting) Name() string { return "http-client-test" }
 func (p *PluginClientTesting) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (files map[string]gomosaic.File, errs error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 
-	services, err := service.ServiceLoad(module, "http", types)
+	annotations, err := annotation.Load(module, "http", types)
 	if err != nil {
 		return nil, err
 	}
@@ -28,10 +28,10 @@ func (p *PluginClientTesting) Generate(ctx context.Context, module *gomosaic.Mod
 	fake := faker.New()
 
 	clientTestGen := testclient.NewClientTest(fake, f.Qual)
-	f.Add(clientTestGen.Generate(services, []testclient.Config{
+	f.Add(clientTestGen.Generate(annotations, []testclient.Config{
 		{StatusCode: 200},                   //nolint: mnd
 		{StatusCode: 400, CheckError: true}, //nolint: mnd
 	}))
 
-	return map[string]gomosaic.File{"client_test.go": f}, nil
+	return map[string]gomosaic.File{"client_gen_test.go": f}, nil
 }

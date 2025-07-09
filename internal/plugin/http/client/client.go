@@ -2,12 +2,12 @@ package client
 
 import (
 	"path/filepath"
-	"strings"
 
 	"github.com/dave/jennifer/jen"
 
 	"github.com/go-mosaic/gomosaic/internal/gen/structure"
-	"github.com/go-mosaic/gomosaic/internal/plugin/http/service"
+	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
+	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/pkg/strcase"
 	"github.com/go-mosaic/gomosaic/pkg/typetransform"
@@ -47,7 +47,7 @@ func (g *ClientGenerator) qual(pkgPath, name string) func(s *jen.Statement) {
 	}
 }
 
-func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, error) {
+func (g *ClientGenerator) Generate(services []*annotation.IfaceOpt) (jen.Code, error) {
 	group := jen.NewFile("")
 
 	group.Add(g.genTypes())
@@ -55,11 +55,9 @@ func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, erro
 	structGen := structure.NewGenerator(group)
 
 	for _, s := range services {
-		if len(s.Errors) > 0 {
-			group.Add(g.genErrorTypes(s))
+		if s.CopyDTOTypes {
+			group.Add(g.genClientDTO(structGen, s))
 		}
-
-		group.Add(g.genClientDTO(structGen, s))
 	}
 
 	g.rewriteTypes = structGen.Processed()
@@ -73,7 +71,7 @@ func (g *ClientGenerator) Generate(services []*service.IfaceOpt) (jen.Code, erro
 	return group, nil
 }
 
-func (g *ClientGenerator) genReqBodyStruct(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genReqBodyStruct(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("").Null()
 
 	if len(methodOpt.BodyParams) == 1 && methodOpt.Single.Req {
@@ -83,9 +81,9 @@ func (g *ClientGenerator) genReqBodyStruct(methodOpt *service.MethodOpt) jen.Cod
 		group.Return(fldParam)
 	} else {
 		if len(methodOpt.WrapReq.PathParts) > 0 {
-			group.Var().Id("body").Struct(service.WrapStruct(methodOpt.WrapReq.PathParts, service.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qual))).Line()
+			group.Var().Id("body").Struct(annotation.WrapStruct(methodOpt.WrapReq.PathParts, annotation.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qual))).Line()
 		} else {
-			group.Var().Id("body").Struct(service.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qual)).Line()
+			group.Var().Id("body").Struct(annotation.MakeStructFieldsFromParams(methodOpt.BodyParams, g.qual)).Line()
 		}
 
 		for _, param := range methodOpt.BodyParams {
@@ -121,22 +119,22 @@ func (g *ClientGenerator) genReqBodyStruct(methodOpt *service.MethodOpt) jen.Cod
 	return group
 }
 
-func (g *ClientGenerator) genJSONReqContent(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genJSONReqContent(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("").Null()
 	group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("application/json")).Line()
 	group.Var().Id("reqData").Qual("bytes", "Buffer").Line()
 
 	group.If(
-		jen.Err().Op(":=").Qual(service.JSONPkg, "NewEncoder").Call(jen.Op("&").Id("reqData")).Dot("Encode").Call(jen.Id(recvName).Dot("makeBodyRequest").Call()),
+		jen.Err().Op(":=").Qual(annotation.JSONPkg, "NewEncoder").Call(jen.Op("&").Id("reqData")).Dot("Encode").Call(jen.Id(recvName).Dot("makeBodyRequest").Call()),
 		jen.Err().Op("!=").Nil(),
 	).Block(
 		g.genTrace(
-			g.genAddEventTrace(jen.Lit("JSON encode error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
+			g.genAddEventTrace(jen.Lit("JSON encode error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
 			g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 		),
 
 		jen.Return(
-			service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+			annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 		),
 	).Line()
 	group.Id("req").Dot("Body").Op("=").Qual("io", "NopCloser").Call(jen.Op("&").Id("reqData"))
@@ -144,7 +142,7 @@ func (g *ClientGenerator) genJSONReqContent(methodOpt *service.MethodOpt) jen.Co
 	return group
 }
 
-func (g *ClientGenerator) genMakeBodyRequetsMethod(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genMakeBodyRequetsMethod(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("").Null()
 
 	methodRequestName := methodRequestName(methodOpt)
@@ -156,7 +154,7 @@ func (g *ClientGenerator) genMakeBodyRequetsMethod(methodOpt *service.MethodOpt)
 	return group
 }
 
-func (g *ClientGenerator) genQueryParams(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genQueryParams(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	group.Id("q").Op(":=").Id("req").Dot("URL").Dot("Query").Call()
@@ -186,7 +184,7 @@ func (g *ClientGenerator) genQueryParams(methodOpt *service.MethodOpt) jen.Code 
 	return group
 }
 
-func (g *ClientGenerator) genHeaderParams(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genHeaderParams(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 	for _, param := range methodOpt.HeaderParams {
 		paramID := jen.Id(recvName).Dot("params").Dot(param.Var.Name)
@@ -212,7 +210,7 @@ func (g *ClientGenerator) genHeaderParams(methodOpt *service.MethodOpt) jen.Code
 	return group
 }
 
-func (g *ClientGenerator) genCookieParams(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genCookieParams(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	for _, param := range methodOpt.CookieParams {
@@ -227,7 +225,7 @@ func (g *ClientGenerator) genCookieParams(methodOpt *service.MethodOpt) jen.Code
 			SetQualFunc(g.qual).
 			Format()
 
-		cookieAdd := jen.Id("req").Dot("AddCookie").Call(jen.Op("&").Qual(service.HTTPPkg, "Cookie").Values(
+		cookieAdd := jen.Id("req").Dot("AddCookie").Call(jen.Op("&").Qual(annotation.HTTPPkg, "Cookie").Values(
 			jen.Id("Name").Op(":").Lit(param.Name),
 			jen.Id("Value").Op(":").Add(code),
 		))
@@ -241,7 +239,7 @@ func (g *ClientGenerator) genCookieParams(methodOpt *service.MethodOpt) jen.Code
 	return group
 }
 
-func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genExecuteMethod(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	methodRequestName := methodRequestName(methodOpt)
@@ -277,36 +275,36 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 				}
 			})
 
-			group.Id("r").Dot("opts").Dot("ctx").Op("=").Qual(service.CTXPkg, "WithValue").Call(
+			group.Id("r").Dot("opts").Dot("ctx").Op("=").Qual(annotation.CTXPkg, "WithValue").Call(
 				jen.Id("r").Dot("opts").Dot("ctx"),
 				jen.Id("methodContextKey"),
-				jen.Id(strcase.ToLowerCamel(methodOpt.Func.Name)+"FullName"),
+				jen.Id(constFullName(methodOpt)),
 			)
 
-			group.Id("r").Dot("opts").Dot("ctx").Op("=").Qual(service.CTXPkg, "WithValue").Call(
+			group.Id("r").Dot("opts").Dot("ctx").Op("=").Qual(annotation.CTXPkg, "WithValue").Call(
 				jen.Id("r").Dot("opts").Dot("ctx"),
 				jen.Id("shortMethodContextKey"),
-				jen.Id(strcase.ToLowerCamel(methodOpt.Func.Name)+"ShortName"),
+				jen.Id(constShortName(methodOpt)),
 			)
 
-			group.Id("r").Dot("opts").Dot("ctx").Op("=").Qual(service.CTXPkg, "WithValue").Call(
+			group.Id("r").Dot("opts").Dot("ctx").Op("=").Qual(annotation.CTXPkg, "WithValue").Call(
 				jen.Id("r").Dot("opts").Dot("ctx"),
 				jen.Id("scopeNameContextKey"),
 				jen.Id(strcase.ToLowerCamel(methodOpt.Iface.NameTypeInfo.Name)+"ScopeName"),
 			)
 
-			group.List(jen.Id("req"), jen.Err()).Op(":=").Qual(service.HTTPPkg, "NewRequestWithContext").Call(
+			group.List(jen.Id("req"), jen.Err()).Op(":=").Qual(annotation.HTTPPkg, "NewRequestWithContext").Call(
 				jen.Id("r").Dot("opts").Dot("ctx"),
 				jen.Lit(methodOpt.Method),
 				jen.Id(recvName).Dot("c").Dot("target").Op("+").Id("path"), jen.Nil(),
 			)
 			group.If(jen.Err().Op("!=").Nil()).Block(
 				g.genTrace(
-					g.genAddEventTrace(jen.Lit("request make error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
+					g.genAddEventTrace(jen.Lit("request make error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
 					g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 				),
 				jen.Return(
-					service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+					annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 				),
 			)
 
@@ -315,7 +313,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 			group.If(jen.Id("r").Dot("opts").Dot("propagator").Op("!=").Nil()).Block(
 				jen.Id("r").Dot("opts").Dot("propagator").Dot("Inject").Call(
 					jen.Id("ctx"),
-					jen.Qual(service.OtelPropagationPkg, "HeaderCarrier").Call(jen.Id("req").Dot("Header")),
+					jen.Qual(annotation.OtelPropagationPkg, "HeaderCarrier").Call(jen.Id("req").Dot("Header")),
 				),
 			)
 
@@ -325,12 +323,12 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 						g.genJSONReqContent(methodOpt),
 					)
 
-					if !service.IsObjectType(methodOpt.BodyParams[0].Var.Type) {
+					if !annotation.IsObjectType(methodOpt.BodyParams[0].Var.Type) {
 						if methodOpt.Use.URLEncoded {
 							group.Case(jen.Lit("application/x-www-form-urlencoded")).BlockFunc(func(group *jen.Group) {
 								group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("application/x-www-form-urlencoded"))
 
-								group.Id("body").Op(":=").Qual(service.URLPkg, "Values").Values()
+								group.Id("body").Op(":=").Qual(annotation.URLPkg, "Values").Values()
 
 								for _, p := range methodOpt.BodyParams {
 									if p.Var.IsContext || !p.Var.Type.IsBasic {
@@ -357,7 +355,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 									}
 								}
 
-								group.Id("req").Dot("Body").Op("=").Add(wrapIOCloser(jen.Qual(service.StringsPkg, "NewReader").Call(jen.Id("body").Dot("Encode").Call())))
+								group.Id("req").Dot("Body").Op("=").Add(wrapIOCloser(jen.Qual(annotation.StringsPkg, "NewReader").Call(jen.Id("body").Dot("Encode").Call())))
 							})
 						}
 
@@ -365,8 +363,8 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 							group.Case(jen.Lit("multipart/form-data")).BlockFunc(func(group *jen.Group) {
 								group.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("multipart/form-data"))
 
-								group.Var().Id("body").Qual(service.BytesPkg, "Buffer")
-								group.Id("multipartWriter").Op(":=").Qual(service.MimeMultipartPkg, "NewWriter").Call(jen.Op("&").Id("body"))
+								group.Var().Id("body").Qual(annotation.BytesPkg, "Buffer")
+								group.Id("multipartWriter").Op(":=").Qual(annotation.MimeMultipartPkg, "NewWriter").Call(jen.Op("&").Id("body"))
 
 								for _, p := range methodOpt.BodyParams {
 									if p.Var.IsContext || !p.Var.Type.IsBasic {
@@ -390,11 +388,11 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 										jen.Err().Op("!=").Nil(),
 									).Block(
 										g.genTrace(
-											g.genAddEventTrace(jen.Lit("multipart write feld "+p.Name+" error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
+											g.genAddEventTrace(jen.Lit("multipart write feld "+p.Name+" error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
 											g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 										),
 										jen.Return(
-											service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+											annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 										),
 									)
 
@@ -430,18 +428,18 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 
 				jen.If(jen.Err().Op("!=").Nil()).Block(
 					jen.Return(
-						service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+						annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 					),
 				),
 			)
 			group.List(jen.Id("resp"), jen.Err()).Op(":=").Id(recvName).Dot("opts").Dot("client").Dot("Do").Call(jen.Id("req"))
 			group.If(jen.Err().Op("!=").Nil()).Block(
 				g.genTrace(
-					g.genAddEventTrace(jen.Lit("do request error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
+					g.genAddEventTrace(jen.Lit("do request error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
 					g.genSetStatusErrorTrace(jen.Lit("failed sent request")),
 				),
 				jen.Return(
-					service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+					annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 				),
 			)
 
@@ -455,44 +453,80 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 			group.If(jen.Id("resp").Dot("StatusCode").Op(">").Lit(httpStatusLastSuccessCode)).BlockFunc(func(group *jen.Group) {
 				group.Add(
 					g.genTrace(
-						g.genAddEventTrace(jen.Lit("response status code failed"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Id("resp").Dot("Status"))),
+						g.genAddEventTrace(jen.Lit("response status code failed"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Id("resp").Dot("Status"))),
 						g.genSetStatusErrorTrace(jen.Lit("failed response")),
 					),
 				)
 
-				group.If(jen.Id("resp").Dot("Body").Op("==").Qual(service.HTTPPkg, "NoBody")).Block(
+				group.If(jen.Id("r").Dot("opts").Dot("errorDecode").Op("!=").Nil()).Block(
 					jen.Return(
-						service.MakeEmptyResults(
+						annotation.MakeEmptyResults(
 							methodOpt.BodyResults,
 							g.qual,
-							jen.Qual(service.FmtPkg, "Errorf").Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode")),
+							jen.Id("r").Dot("opts").Dot("errorDecode").Call(
+								jen.Id("resp").Dot("Body"),
+								jen.Id("resp").Dot("StatusCode"),
+							),
 						)...,
 					),
 				)
 
-				if len(methodOpt.Iface.Errors) > 0 {
-					errorTypeName := errorTypeName(methodOpt.Iface)
+				// group.If(jen.Id("resp").Dot("Body").Op("==").Qual(annotation.HTTPPkg, "NoBody")).Block(
+				// 	jen.Return(
+				// 		annotation.MakeEmptyResults(
+				// 			methodOpt.BodyResults,
+				// 			g.qual,
+				// 			jen.Qual(annotation.FmtPkg, "Errorf").Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode")),
+				// 		)...,
+				// 	),
+				// )
 
-					group.Var().Id("clientErr").Id(errorTypeName)
+				// if len(methodOpt.Iface.Errors) > 0 {
+				// 	errorTypeName := errorTypeName(methodOpt.Iface)
 
-					for _, e := range methodOpt.Iface.Errors {
-						if e.StatusCode {
-							group.Id("clientErr").Dot(e.FldName).Op("=").Id("resp").Dot("StatusCode")
-						}
-					}
+				// 	group.Var().Id("clientErr").Id(errorTypeName)
 
-					group.If(
-						jen.Err().Op(":=").Qual(service.JSONPkg, "NewDecoder").Call(jen.Id("resp").Dot("Body")).Dot("Decode").Call(jen.Op("&").Id("clientErr")),
-						jen.Id("err").Op("!=").Id("nil"),
-					).Block(
-						jen.Return(service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...),
-					)
+				// 	for _, e := range methodOpt.Iface.Errors {
+				// 		if e.StatusCode {
+				// 			group.Id("clientErr").Dot(e.FldName).Op("=").Id("resp").Dot("StatusCode")
+				// 		}
+				// 	}
 
-					group.Return(service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Op("&").Id("clientErr"))...)
-				} else {
-					group.Id("err").Op("=").Do(g.qual(service.FmtPkg, "Errorf")).Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode"))
-					group.Return()
-				}
+				// 	group.If(
+				// 		jen.Err().Op(":=").Qual(annotation.JSONPkg, "NewDecoder").Call(jen.Id("resp").Dot("Body")).Dot("Decode").Call(jen.Op("&").Id("clientErr")),
+				// 		jen.Id("err").Op("!=").Id("nil"),
+				// 	).Block(
+				// 		jen.Return(annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...),
+				// 	)
+
+				// 	group.Return(annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Op("&").Id("clientErr"))...)
+				// } else {
+				//
+
+				// group.Id("err").Op("=").Do(g.qual(annotation.FmtPkg, "Errorf")).Call(jen.Lit("http error %d"), jen.Id("resp").Dot("StatusCode"))
+				//
+				group.Return(
+					annotation.MakeEmptyResults(
+						methodOpt.BodyResults,
+						g.qual,
+						jen.Qual(gomosaic.ClientPkg, "ErrorDecode").Call(
+							jen.Id("resp").Dot("Body"),
+							jen.Id("resp").Dot("StatusCode"),
+							jen.Func().Params(
+								jen.Id("_").Struct(),
+								jen.Id("data").Index().Byte(),
+							).Error().Block(
+								jen.Return(
+									jen.Op("&").Id("ClientError").Values(
+										jen.Id("Data").Op(":").Id("data"),
+										jen.Id("StatusCode").Op(":").Id("resp").Dot("StatusCode"),
+									),
+								),
+							),
+						),
+					)...,
+				)
+				// }
 			})
 
 			if len(methodOpt.BodyResults) > 0 {
@@ -503,7 +537,7 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 						jen.List(jen.Id("reader"), jen.Err()).Op("=").Qual("compress/gzip", "NewReader").Call(jen.Id("resp").Dot("Body")),
 						jen.If(jen.Err().Op("!=").Nil()).Block(
 							jen.Return(
-								service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+								annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 							),
 						),
 						jen.Defer().Id("reader").Dot("Close").Call(),
@@ -514,22 +548,22 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					group.Var().Id("respBody").Add(jenutils.TypeInfoQual(methodOpt.BodyResults[0].Var.Type, g.qual))
 				} else {
 					if len(methodOpt.WrapResp.PathParts) > 0 {
-						group.Var().Id("respBody").Struct(service.WrapStruct(methodOpt.WrapResp.PathParts, service.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)))
+						group.Var().Id("respBody").Struct(annotation.WrapStruct(methodOpt.WrapResp.PathParts, annotation.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)))
 					} else {
-						group.Var().Id("respBody").Struct(service.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)).Line()
+						group.Var().Id("respBody").Struct(annotation.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)).Line()
 					}
 				}
 
 				group.If(
-					jen.Err().Op(":=").Qual(service.JSONPkg, "NewDecoder").Call(jen.Id("reader")).Dot("Decode").Call(jen.Op("&").Id("respBody")),
+					jen.Err().Op(":=").Qual(annotation.JSONPkg, "NewDecoder").Call(jen.Id("reader")).Dot("Decode").Call(jen.Op("&").Id("respBody")),
 					jen.Err().Op("!=").Nil(),
 				).Block(
 					g.genTrace(
-						g.genAddEventTrace(jen.Lit("JSON decode error"), jen.Qual(service.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
+						g.genAddEventTrace(jen.Lit("JSON decode error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
 						g.genSetStatusErrorTrace(jen.Lit("failed read response")),
 					),
 					jen.Return(
-						service.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+						annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
 					),
 				)
 
@@ -557,13 +591,13 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *service.MethodOpt) jen.Cod
 					g.Nil()
 				})
 			} else {
-				group.Return()
+				group.Return(jen.Nil())
 			}
 		})
 	return group
 }
 
-func (g *ClientGenerator) genParamSetters(params []*service.MethodParamOpt) jen.Code {
+func (g *ClientGenerator) genParamSetters(params []*annotation.MethodParamOpt) jen.Code {
 	group := jen.Null()
 
 	for _, param := range params {
@@ -579,7 +613,7 @@ func (g *ClientGenerator) genParamSetters(params []*service.MethodParamOpt) jen.
 	return group
 }
 
-func (g *ClientGenerator) genClientMethod(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genClientMethod(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	clientName := clientStructName(methodOpt.Iface)
@@ -648,7 +682,7 @@ func (g *ClientGenerator) genClientMethod(methodOpt *service.MethodOpt) jen.Code
 	return group
 }
 
-func (g *ClientGenerator) genReqStructSetters(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genReqStructSetters(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	for _, param := range methodOpt.Params {
@@ -678,7 +712,7 @@ func (g *ClientGenerator) genReqStructSetters(methodOpt *service.MethodOpt) jen.
 	return group
 }
 
-func (g *ClientGenerator) genRequestStructParam(p *service.MethodParamOpt) jen.Code {
+func (g *ClientGenerator) genRequestStructParam(p *annotation.MethodParamOpt) jen.Code {
 	name := strcase.ToLowerCamel(p.Var.Name)
 
 	paramNameID := jen.Id(name)
@@ -689,7 +723,7 @@ func (g *ClientGenerator) genRequestStructParam(p *service.MethodParamOpt) jen.C
 	return paramNameID.Add(jenutils.TypeInfoQual(p.Var.Type, g.qual))
 }
 
-func (g *ClientGenerator) genReqStruct(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genReqStruct(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	methodRequestName := methodRequestName(methodOpt)
@@ -711,7 +745,7 @@ func (g *ClientGenerator) genReqStruct(methodOpt *service.MethodOpt) jen.Code {
 	return group
 }
 
-func (g *ClientGenerator) genClientEndpoint(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genClientEndpoint(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	group.Add(g.genClientMethod(methodOpt))
@@ -728,7 +762,7 @@ func (g *ClientGenerator) genClientEndpoint(methodOpt *service.MethodOpt) jen.Co
 	return group
 }
 
-func (g *ClientGenerator) genClientEndpoints(ifaceOpt *service.IfaceOpt) jen.Code {
+func (g *ClientGenerator) genClientEndpoints(ifaceOpt *annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
 	for _, methodOpt := range ifaceOpt.Methods {
@@ -738,7 +772,7 @@ func (g *ClientGenerator) genClientEndpoints(ifaceOpt *service.IfaceOpt) jen.Cod
 	return group
 }
 
-func (g *ClientGenerator) genClientConstruct(ifaceOpt *service.IfaceOpt) jen.Code {
+func (g *ClientGenerator) genClientConstruct(ifaceOpt *annotation.IfaceOpt) jen.Code {
 	clientName := clientStructName(ifaceOpt)
 
 	group := jen.NewFile("")
@@ -752,7 +786,7 @@ func (g *ClientGenerator) genClientConstruct(ifaceOpt *service.IfaceOpt) jen.Cod
 			g.Id("c").Op(":=").Op("&").Id(clientName).Values(
 				jen.Id("target").Op(":").Id("target"),
 				jen.Id("opts").Op(":").Id(clientOptionName).Values(
-					jen.Id("client").Op(":").Qual(service.CleanHTTPPkg, "DefaultClient").Call(),
+					jen.Id("client").Op(":").Qual(annotation.CleanHTTPPkg, "DefaultClient").Call(),
 				),
 			)
 			g.For(jen.List(jen.Id("_"), jen.Id("o")).Op(":=").Range().Id("opts")).Block(
@@ -765,10 +799,13 @@ func (g *ClientGenerator) genClientConstruct(ifaceOpt *service.IfaceOpt) jen.Cod
 	return group
 }
 
-func (g *ClientGenerator) genClientDTO(structGen *structure.Generator, ifaceOpt *service.IfaceOpt) jen.Code {
+func (g *ClientGenerator) genClientDTO(structGen *structure.Generator, ifaceOpt *annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
 	for _, m := range ifaceOpt.Methods {
+		for _, p := range m.BodyParams {
+			structGen.Generate(p.Var.Type)
+		}
 		for _, p := range m.BodyResults {
 			structGen.Generate(p.Var.Type)
 		}
@@ -777,12 +814,12 @@ func (g *ClientGenerator) genClientDTO(structGen *structure.Generator, ifaceOpt 
 	return group
 }
 
-func (g *ClientGenerator) genClientStruct(ifaceOpt *service.IfaceOpt) jen.Code {
+func (g *ClientGenerator) genClientStruct(ifaceOpt *annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
 	for _, m := range ifaceOpt.Methods {
-		group.Const().Id(strcase.ToLowerCamel(m.Func.Name) + "ShortName").Op("=").Lit(m.Func.ShortName)
-		group.Const().Id(strcase.ToLowerCamel(m.Func.Name) + "FullName").Op("=").Lit(m.Func.FullName)
+		group.Const().Id(constShortName(m)).Op("=").Lit(m.Func.ShortName)
+		group.Const().Id(constFullName(m)).Op("=").Lit(m.Func.FullName)
 	}
 
 	clientName := clientStructName(ifaceOpt)
@@ -812,11 +849,11 @@ func (g *ClientGenerator) genTypes() jen.Code {
 	group.Func().Id("labelFromContext").Params(
 		jen.Id("lblName").String(),
 		jen.Id("ctxKey").Id("contextKey"),
-	).Qual(service.PromHTTPPkg, "Option").Block(
+	).Qual(annotation.PromHTTPPkg, "Option").Block(
 		jen.Return(
-			jen.Qual(service.PromHTTPPkg, "WithLabelFromCtx").Call(
+			jen.Qual(annotation.PromHTTPPkg, "WithLabelFromCtx").Call(
 				jen.Id("lblName"),
-				jen.Func().Params(jen.Id("ctx").Qual(service.CTXPkg, "Context")).String().Block(
+				jen.Func().Params(jen.Id("ctx").Qual(annotation.CTXPkg, "Context")).String().Block(
 					jen.List(jen.Id("v"), jen.Id("_")).Op(":=").Id("ctx").Dot("Value").Call(jen.Id("ctxKey")).Assert(jen.String()),
 					jen.Return(jen.Id("v")),
 				),
@@ -824,21 +861,21 @@ func (g *ClientGenerator) genTypes() jen.Code {
 		),
 	)
 	group.Func().Id("instrumentRoundTripperErrCounter").Params(
-		jen.Id("counter").Op("*").Qual(service.PrometheusPkg, "CounterVec"),
-		jen.Id("next").Qual(service.HTTPPkg, "RoundTripper"),
-	).Qual(service.PromHTTPPkg, "RoundTripperFunc").Block(
+		jen.Id("counter").Op("*").Qual(annotation.PrometheusPkg, "CounterVec"),
+		jen.Id("next").Qual(annotation.HTTPPkg, "RoundTripper"),
+	).Qual(annotation.PromHTTPPkg, "RoundTripperFunc").Block(
 		jen.Return(
 			jen.Func().
 				Params(
-					jen.Id("r").Op("*").Qual(service.HTTPPkg, "Request"),
+					jen.Id("r").Op("*").Qual(annotation.HTTPPkg, "Request"),
 				).
 				Params(
-					jen.Op("*").Qual(service.HTTPPkg, "Response"),
+					jen.Op("*").Qual(annotation.HTTPPkg, "Response"),
 					jen.Error(),
 				).
 				Block(
-					jen.Id("labels").Op(":=").Qual(service.PrometheusPkg, "Labels").Values(
-						jen.Lit("method").Op(":").Qual(service.StringsPkg, "ToLower").Call(jen.Id("r").Dot("Method")),
+					jen.Id("labels").Op(":=").Qual(annotation.PrometheusPkg, "Labels").Values(
+						jen.Lit("method").Op(":").Qual(annotation.StringsPkg, "ToLower").Call(jen.Id("r").Dot("Method")),
 					),
 					jen.List(jen.Id("labels").Index(jen.Lit("methodNameFull")), jen.Id("_")).Op("=").Id("r").Dot("Context").Call().Dot("Value").Call(jen.Id("methodContextKey")).Assert(jen.String()),
 					jen.List(jen.Id("labels").Index(jen.Lit("methodNameShort")), jen.Id("_")).Op("=").Id("r").Dot("Context").Call().Dot("Value").Call(jen.Id("shortMethodContextKey")).Assert(jen.String()),
@@ -851,28 +888,28 @@ func (g *ClientGenerator) genTypes() jen.Code {
 							jen.Default().Block(
 								jen.Id("errType").Op("=").Err().Dot("Error").Call(),
 							),
-							jen.Case(jen.Op("*").Qual(service.TLSPkg, "CertificateVerificationError")).Block(
+							jen.Case(jen.Op("*").Qual(annotation.TLSPkg, "CertificateVerificationError")).Block(
 								jen.Id("errType").Op("=").Lit("failedVerifyCertificate"),
 							),
-							jen.Case(jen.Qual(service.NetPkg, "Error")).Block(
+							jen.Case(jen.Qual(annotation.NetPkg, "Error")).Block(
 								jen.Id("errType").Op("+=").Lit("net."),
 								jen.If(jen.Id("e").Dot("Timeout").Call()).Block(
 									jen.Id("errType").Op("+=").Lit("timeout."),
 								),
 								jen.Switch(jen.Id("ee").Op(":=").Id("e").Assert(jen.Id("type"))).Block(
-									jen.Case(jen.Op("*").Qual(service.NetPkg, "ParseError")).Block(
+									jen.Case(jen.Op("*").Qual(annotation.NetPkg, "ParseError")).Block(
 										jen.Id("errType").Op("+=").Lit("parse"),
 									),
-									jen.Case(jen.Op("*").Qual(service.NetPkg, "InvalidAddrError")).Block(
+									jen.Case(jen.Op("*").Qual(annotation.NetPkg, "InvalidAddrError")).Block(
 										jen.Id("errType").Op("+=").Lit("invalidAddr"),
 									),
-									jen.Case(jen.Op("*").Qual(service.NetPkg, "UnknownNetworkError")).Block(
+									jen.Case(jen.Op("*").Qual(annotation.NetPkg, "UnknownNetworkError")).Block(
 										jen.Id("errType").Op("+=").Lit("unknownNetwork"),
 									),
-									jen.Case(jen.Op("*").Qual(service.NetPkg, "DNSError")).Block(
+									jen.Case(jen.Op("*").Qual(annotation.NetPkg, "DNSError")).Block(
 										jen.Id("errType").Op("+=").Lit("dns"),
 									),
-									jen.Case(jen.Op("*").Qual(service.NetPkg, "OpError")).Block(
+									jen.Case(jen.Op("*").Qual(annotation.NetPkg, "OpError")).Block(
 										jen.Id("errType").Op("+=").Id("ee").Dot("Net").Op("+").Lit(".").Op("+").Id("ee").Dot("Op"),
 									),
 								),
@@ -881,7 +918,7 @@ func (g *ClientGenerator) genTypes() jen.Code {
 						jen.Id("labels").Index(jen.Lit("errorCode")).Op("=").Id("errType"),
 						jen.Id("counter").Dot("With").Call(jen.Id("labels")).Dot("Add").Call(jen.Lit(1)),
 					).Else().If(jen.Id("resp").Dot("StatusCode").Op(">").Lit(httpStatusLastSuccessCode)).Block(
-						jen.List(jen.Id("labels").Index(jen.Lit("code"))).Op("=").Qual(service.StrconvPkg, "Itoa").Call(jen.Id("resp").Dot("StatusCode")),
+						jen.List(jen.Id("labels").Index(jen.Lit("code"))).Op("=").Qual(annotation.StrconvPkg, "Itoa").Call(jen.Id("resp").Dot("StatusCode")),
 						jen.Id("labels").Index(jen.Lit("errorCode")).Op("=").Lit("respFailed"),
 						jen.Id("counter").Dot("With").Call(jen.Id("labels")).Dot("Add").Call(jen.Lit(1)),
 					),
@@ -892,13 +929,13 @@ func (g *ClientGenerator) genTypes() jen.Code {
 	)
 
 	group.Type().Id("prometheusCollector").Interface(
-		jen.Qual(service.PrometheusPkg, "Collector"),
-		// jen.Id("Inflight").Params().Params(jen.Qual(service.PrometheusPkg, "Gauge")),
-		jen.Id("Requests").Params().Params(jen.Op("*").Qual(service.PrometheusPkg, "CounterVec")),
-		jen.Id("ErrRequests").Params().Params(jen.Op("*").Qual(service.PrometheusPkg, "CounterVec")),
-		jen.Id("Duration").Params().Params(jen.Op("*").Qual(service.PrometheusPkg, "HistogramVec")),
-		// jen.Id("DNSDuration").Params().Params(jen.Op("*").Qual(service.PrometheusPkg, "HistogramVec")),
-		// jen.Id("TLSDuration").Params().Params(jen.Op("*").Qual(service.PrometheusPkg, "HistogramVec")),
+		jen.Qual(annotation.PrometheusPkg, "Collector"),
+		// jen.Id("Inflight").Params().Params(jen.Qual(annotation.PrometheusPkg, "Gauge")),
+		jen.Id("Requests").Params().Params(jen.Op("*").Qual(annotation.PrometheusPkg, "CounterVec")),
+		jen.Id("ErrRequests").Params().Params(jen.Op("*").Qual(annotation.PrometheusPkg, "CounterVec")),
+		jen.Id("Duration").Params().Params(jen.Op("*").Qual(annotation.PrometheusPkg, "HistogramVec")),
+		// jen.Id("DNSDuration").Params().Params(jen.Op("*").Qual(annotation.PrometheusPkg, "HistogramVec")),
+		// jen.Id("TLSDuration").Params().Params(jen.Op("*").Qual(annotation.PrometheusPkg, "HistogramVec")),
 	)
 
 	group.Type().Id("ClientBeforeFunc").Func().Params(
@@ -911,25 +948,37 @@ func (g *ClientGenerator) genTypes() jen.Code {
 		jen.Op("*").Qual("net/http", "Response"),
 	).Qual("context", "Context")
 
+	group.Type().Id("ClientError").Struct(
+		jen.Id("Data").Index().Byte(),
+		jen.Id("StatusCode").Int(),
+	)
+
+	group.Func().Params(jen.Id("e").Op("*").Id("ClientError")).Id("Error").Params().String().Block(
+		jen.Return(jen.Qual(annotation.FmtPkg, "Sprint").Call(jen.Id("e").Dot("StatusCode")).Op("+").Lit(": ").Op("+").String().Call(jen.Id("e").Dot("Data"))),
+	)
+
+	group.Type().Id("ErrorDecoder").Func().Params(jen.Qual("io", "ReadCloser"), jen.Int()).Error()
+
 	group.Type().Id(clientOptionName).Struct(
 		jen.Id("ctx").Qual("context", "Context"),
 		jen.Id("content").String(),
-		jen.Id("tracer").Qual(service.OtelTracePkg, "Tracer"),
-		jen.Id("propagator").Qual(service.OtelPropagationPkg, "TextMapPropagator"),
+		jen.Id("tracer").Qual(annotation.OtelTracePkg, "Tracer"),
+		jen.Id("propagator").Qual(annotation.OtelPropagationPkg, "TextMapPropagator"),
 		jen.Id("before").Index().Id("ClientBeforeFunc"),
 		jen.Id("after").Index().Id("ClientAfterFunc"),
-		jen.Id("client").Op("*").Qual(service.HTTPPkg, "Client"),
+		jen.Id("errorDecode").Id("ErrorDecoder"),
+		jen.Id("client").Op("*").Qual(annotation.HTTPPkg, "Client"),
 	)
 
 	group.Type().Id("ClientOption").Func().Params(jen.Op("*").Id(clientOptionName))
 
-	group.Func().Id("WithTracer").Params(jen.Id("tracer").Qual(service.OtelTracePkg, "Tracer")).Id("ClientOption").Block(
+	group.Func().Id("WithTracer").Params(jen.Id("tracer").Qual(annotation.OtelTracePkg, "Tracer")).Id("ClientOption").Block(
 		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
 			jen.Id("o").Dot("tracer").Op("=").Id("tracer"),
 		)),
 	)
 
-	group.Func().Id("WithPropagator").Params(jen.Id("propagator").Qual(service.OtelPropagationPkg, "TextMapPropagator")).Id("ClientOption").Block(
+	group.Func().Id("WithPropagator").Params(jen.Id("propagator").Qual(annotation.OtelPropagationPkg, "TextMapPropagator")).Id("ClientOption").Block(
 		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
 			jen.Id("o").Dot("propagator").Op("=").Id("propagator"),
 		)),
@@ -947,7 +996,7 @@ func (g *ClientGenerator) genTypes() jen.Code {
 		)),
 	)
 
-	group.Func().Id("WithHTTPClient").Params(jen.Id("client").Op("*").Qual(service.HTTPPkg, "Client")).Id("ClientOption").Block(
+	group.Func().Id("WithHTTPClient").Params(jen.Id("client").Op("*").Qual(annotation.HTTPPkg, "Client")).Id("ClientOption").Block(
 		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
 			jen.Id("o").Dot("client").Op("=").Id("client"),
 		)),
@@ -958,16 +1007,16 @@ func (g *ClientGenerator) genTypes() jen.Code {
 			jen.If(jen.Id("o").Dot("client").Dot("Transport").Op("==").Nil()).Block(
 				jen.Panic(jen.Lit("no transport is set for the http client")),
 			),
-			// jen.Id("trace").Op(":=").Op("&").Qual(service.PromHTTPPkg, "InstrumentTrace").Values(),
+			// jen.Id("trace").Op(":=").Op("&").Qual(annotation.PromHTTPPkg, "InstrumentTrace").Values(),
 			jen.Id("o").Dot("client").Dot("Transport").Op("=").
 				Id("instrumentRoundTripperErrCounter").Call(jen.Id("c").Dot("ErrRequests").Call(),
-				// jen.Qual(service.PromHTTPPkg, "InstrumentRoundTripperInFlight").Call(
+				// jen.Qual(annotation.PromHTTPPkg, "InstrumentRoundTripperInFlight").Call(
 				// jen.Id("c").Dot("Inflight").Call(),
-				jen.Qual(service.PromHTTPPkg, "InstrumentRoundTripperCounter").Call(
+				jen.Qual(annotation.PromHTTPPkg, "InstrumentRoundTripperCounter").Call(
 					jen.Id("c").Dot("Requests").Call(),
-					// jen.Qual(service.PromHTTPPkg, "InstrumentRoundTripperTrace").Call(
+					// jen.Qual(annotation.PromHTTPPkg, "InstrumentRoundTripperTrace").Call(
 					// jen.Id("trace"),
-					jen.Qual(service.PromHTTPPkg, "InstrumentRoundTripperDuration").Call(
+					jen.Qual(annotation.PromHTTPPkg, "InstrumentRoundTripperDuration").Call(
 						jen.Id("c").Dot("Duration").Call(),
 						jen.Id("o").Dot("client").Dot("Transport"),
 						labelContextMethodShortName,
@@ -981,6 +1030,12 @@ func (g *ClientGenerator) genTypes() jen.Code {
 				),
 				// ),
 			),
+		)),
+	)
+
+	group.Func().Id("WithErrorDecode").Params(jen.Id("errorDecode").Id("ErrorDecoder")).Id("ClientOption").Block(
+		jen.Return(jen.Func().Params(jen.Id("o").Op("*").Id(clientOptionName)).Block(
+			jen.Id("o").Dot("errorDecode").Op("=").Id("errorDecode"),
 		)),
 	)
 
@@ -998,72 +1053,73 @@ func (g *ClientGenerator) genTypes() jen.Code {
 
 	return group
 }
-func (g *ClientGenerator) genErrorTypes(s *service.IfaceOpt) jen.Code {
-	group := jen.NewFile("")
 
-	fieldsMap := make(map[string]service.ErrorOpt)
+// func (g *ClientGenerator) genErrorTypes(s *annotation.IfaceOpt) jen.Code {
+// 	group := jen.NewFile("")
 
-	var structFields []jen.Code
-	for _, e := range s.Errors {
-		fieldsMap[e.FldName] = e
-		structFields = append(structFields, jen.Id(e.FldName).Id(e.Type).Tag(map[string]string{"json": e.TagName}))
-	}
+// 	fieldsMap := make(map[string]annotation.ErrorOpt)
 
-	errorTypeName := errorTypeName(s)
-	group.Type().Id(errorTypeName).Struct(structFields...)
+// 	var structFields []jen.Code
+// 	for _, e := range s.Errors {
+// 		fieldsMap[e.FldName] = e
+// 		structFields = append(structFields, jen.Id(e.FldName).Id(e.Type).Tag(map[string]string{"json": e.TagName}))
+// 	}
 
-	errorText := jen.Null()
+// 	errorTypeName := errorTypeName(s)
+// 	group.Type().Id(errorTypeName).Struct(structFields...)
 
-	startTag := "{{"
-	endTag := "}}"
-	input := s.ErrorText
-	index := 0
-	for {
-		startIndex := strings.Index(input, startTag)
-		if startIndex == -1 {
-			break
-		}
-		endIndex := strings.Index(input[startIndex:], endTag)
-		if endIndex == -1 {
-			break
-		}
+// 	errorText := jen.Null()
 
-		endIndex += startIndex
+// 	startTag := "{{"
+// 	endTag := "}}"
+// 	input := s.ErrorText
+// 	index := 0
+// 	for {
+// 		startIndex := strings.Index(input, startTag)
+// 		if startIndex == -1 {
+// 			break
+// 		}
+// 		endIndex := strings.Index(input[startIndex:], endTag)
+// 		if endIndex == -1 {
+// 			break
+// 		}
 
-		fldName := strings.TrimSpace(input[startIndex+len(startTag) : endIndex])
-		fldNameID := jen.Id("e").Dot(fldName)
+// 		endIndex += startIndex
 
-		e := fieldsMap[fldName]
-		if e.Type != "" && e.Type != "string" {
-			fldNameID = jen.Qual(service.FmtPkg, "Sprint").Call(fldNameID)
-		}
+// 		fldName := strings.TrimSpace(input[startIndex+len(startTag) : endIndex])
+// 		fldNameID := jen.Id("e").Dot(fldName)
 
-		if index > 0 {
-			errorText.Op("+")
-		}
+// 		e := fieldsMap[fldName]
+// 		if e.Type != "" && e.Type != "string" {
+// 			fldNameID = jen.Qual(annotation.FmtPkg, "Sprint").Call(fldNameID)
+// 		}
 
-		if s := input[:startIndex]; s != "" {
-			errorText.Lit(s).Op("+")
-		}
+// 		if index > 0 {
+// 			errorText.Op("+")
+// 		}
 
-		errorText.Add(fldNameID)
-		input = input[endIndex+len(endTag):]
-		index++
-	}
+// 		if s := input[:startIndex]; s != "" {
+// 			errorText.Lit(s).Op("+")
+// 		}
 
-	if input != "" {
-		if index > 0 {
-			errorText.Op("+")
-		}
-		errorText.Lit(input)
-	}
+// 		errorText.Add(fldNameID)
+// 		input = input[endIndex+len(endTag):]
+// 		index++
+// 	}
 
-	group.Func().Params(jen.Id("e").Op("*").Id(errorTypeName)).Id("Error").Params().String().Block(
-		jen.Return(errorText),
-	)
+// 	if input != "" {
+// 		if index > 0 {
+// 			errorText.Op("+")
+// 		}
+// 		errorText.Lit(input)
+// 	}
 
-	return group
-}
+// 	group.Func().Params(jen.Id("e").Op("*").Id(errorTypeName)).Id("Error").Params().String().Block(
+// 		jen.Return(errorText),
+// 	)
+
+// 	return group
+// }
 
 func (g *ClientGenerator) genTrace(codes ...jen.Code) jen.Code {
 	group := jen.NewFile("").Null()
@@ -1072,16 +1128,16 @@ func (g *ClientGenerator) genTrace(codes ...jen.Code) jen.Code {
 	return group
 }
 
-func (g *ClientGenerator) genStartTrace(methodOpt *service.MethodOpt) jen.Code {
+func (g *ClientGenerator) genStartTrace(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	tracerID := jen.Id("r").Dot("opts").Dot("tracer")
 
-	group.Var().Id("span").Qual(service.OtelTracePkg, "Span")
+	group.Var().Id("span").Qual(annotation.OtelTracePkg, "Span")
 
 	group.Add(
 		g.genTrace(
-			jen.List(jen.Id("ctx"), jen.Id("span")).Op("=").Add(tracerID).Dot("Start").Call(jen.Id("ctx"), jen.Id(strcase.ToLowerCamel(methodOpt.Func.Name)+"ShortName"), jen.Qual(service.OtelTracePkg, "WithSpanKind").Call(jen.Qual(service.OtelTracePkg, "SpanKindServer"))),
+			jen.List(jen.Id("ctx"), jen.Id("span")).Op("=").Add(tracerID).Dot("Start").Call(jen.Id("ctx"), jen.Id(constShortName(methodOpt)), jen.Qual(annotation.OtelTracePkg, "WithSpanKind").Call(jen.Qual(annotation.OtelTracePkg, "SpanKindServer"))),
 			jen.Defer().Id("span").Dot("End").Call(),
 		),
 	)
@@ -1095,7 +1151,7 @@ func (g *ClientGenerator) genAddEventTrace(msg jen.Code, options ...jen.Code) je
 		group.Add(msg)
 
 		if len(options) > 0 {
-			group.Add(jen.Qual(service.OtelTracePkg, "WithAttributes")).Call(options...)
+			group.Add(jen.Qual(annotation.OtelTracePkg, "WithAttributes")).Call(options...)
 		}
 	})
 
@@ -1103,9 +1159,9 @@ func (g *ClientGenerator) genAddEventTrace(msg jen.Code, options ...jen.Code) je
 }
 
 func (g *ClientGenerator) genSetStatusErrorTrace(msg jen.Code) jen.Code {
-	return jen.Id("span").Dot("SetStatus").Call(jen.Qual(service.OtelCodesPkg, "Error"), msg)
+	return jen.Id("span").Dot("SetStatus").Call(jen.Qual(annotation.OtelCodesPkg, "Error"), msg)
 }
 
 func (g *ClientGenerator) genSetStatusOkTrace(msg jen.Code) jen.Code {
-	return jen.Id("span").Dot("SetStatus").Call(jen.Qual(service.OtelCodesPkg, "Ok"), msg)
+	return jen.Id("span").Dot("SetStatus").Call(jen.Qual(annotation.OtelCodesPkg, "Ok"), msg)
 }

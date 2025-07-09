@@ -1,4 +1,4 @@
-package service
+package annotation
 
 import (
 	"github.com/hashicorp/go-multierror"
@@ -11,21 +11,17 @@ type MethodOpt struct {
 	Iface *IfaceOpt
 	Func  *gomosaic.MethodInfo
 
-	// Metric Включить метрики
-	Metric bool `option:"metric,asFlag"`
+	// @godoc-title "Пропустить генерацию логирования для метода"
+	Skip bool `option:"skip,asFlag"`
 }
 
 type IfaceOpt struct {
 	NameTypeInfo *gomosaic.NameTypeInfo
-
-	// Enable Включить логирование
-	Enable bool `option:"enable,asFlag"`
-
 	// Аннотации для методов
 	Methods []*MethodOpt
 }
 
-func ServiceLoad(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {
+func Load(module *gomosaic.ModuleInfo, prefix string, types []*gomosaic.NameTypeInfo) (interfaces []*IfaceOpt, errs error) {
 	for _, nameTypeInfo := range types {
 		if nameTypeInfo.Type.Interface == nil {
 			continue

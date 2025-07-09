@@ -455,7 +455,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 
 	switch t := t.(type) {
 	default:
-		fmt.Printf("%T\n", t)
+		fmt.Printf("unknown type: %T\n", t)
 	case *types.Basic:
 		typeInfo.Name = t.Name()
 		typeInfo.IsBasic = true

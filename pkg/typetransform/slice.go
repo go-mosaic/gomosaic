@@ -12,7 +12,7 @@ var _ Parser = &SliceTypeParse{}
 type SliceTypeParse struct{}
 
 func (s *SliceTypeParse) Parse(valueID, assignID jen.Code, typeInfo *gomosaic.TypeInfo, errorStatements []jen.Code, qualFn jenutils.QualFunc) (code jen.Code) {
-	switch typeInfo.BasicInfo {
+	switch typeInfo.ElemType.BasicInfo {
 	default:
 		panic("unknown slice basic type")
 	case gomosaic.IsString:

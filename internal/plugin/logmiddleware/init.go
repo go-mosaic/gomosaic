@@ -1,4 +1,4 @@
-package log
+package logmiddleware
 
 import "github.com/go-mosaic/gomosaic/pkg/gomosaic"
 
