@@ -20,6 +20,10 @@ func (s *StrategyChi) TransportConstruct() string {
 	return "NewChiTransport"
 }
 
+func (s *StrategyChi) TransportOptionsTypeName() string {
+	return "ChiTransportOption"
+}
+
 func (s *StrategyChi) TransportPkg() string {
 	return "github.com/go-mosaic/runtime/transport/chi"
 }

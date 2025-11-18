@@ -28,6 +28,7 @@ func (g *ServerGenerator) genServiceOptions(services []*annotation.IfaceOpt) jen
 	for _, s := range services {
 		middlewareType := jen.Qual(gomosaic.TransportPkg, "Middleware")
 		optionsName := s.NameTypeInfo.Name + "Options"
+
 		group.Add(g.genTypeOptions(optionsName, middlewareType, s.Methods))
 	}
 
@@ -37,12 +38,20 @@ func (g *ServerGenerator) genServiceOptions(services []*annotation.IfaceOpt) jen
 func (g *ServerGenerator) genTypeOptions(optionsName string, middlewareType jen.Code, methods []*annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
+	transportOptions := jen.Do(g.qualifier.Qual(g.strategy.TransportPkg(), g.strategy.TransportOptionsTypeName()))
+
 	group.Type().Id(optionsName).StructFunc(func(group *jen.Group) {
+		group.Id("transportOptions").Index().Add(transportOptions)
 		group.Id("middleware").Index().Add(middlewareType)
 		for _, m := range methods {
 			group.Id("middleware" + m.Func.Name).Index().Add(middlewareType)
 		}
 	})
+
+	group.Func().Params(jen.Id("o").Op("*").Id(optionsName)).Id("TransportOptions").Params(jen.Id("opts").Op("...").Add(transportOptions)).Op("*").Id(optionsName).Block(
+		jen.Id("o").Dot("transportOptions").Op("=").Append(jen.Id("o").Dot("transportOptions"), jen.Id("opts").Op("...")),
+		jen.Return(jen.Id("o")),
+	).Line()
 
 	group.Func().Params(jen.Id("o").Op("*").Id(optionsName)).Id("Middleware").Params(jen.Id("middleware").Op("...").Add(middlewareType)).Op("*").Id(optionsName).Block(
 		jen.Id("o").Dot("middleware").Op("=").Append(jen.Id("o").Dot("middleware"), jen.Id("middleware").Op("...")),
@@ -256,7 +265,10 @@ func (g *ServerGenerator) genRegisterHandlers(s *annotation.IfaceOpt) jen.Code {
 	).BlockFunc(func(group *jen.Group) {
 		group.Add(g.genOptionLoader(s.NameTypeInfo.Name))
 
-		group.Id("tr").Op(":=").Qual(g.strategy.TransportPkg(), g.strategy.TransportConstruct()).Call(jen.Id("router"))
+		group.Id("tr").Op(":=").Qual(g.strategy.TransportPkg(), g.strategy.TransportConstruct()).Call(
+			jen.Id("router"),
+			jen.Id("opt").Dot("transportOptions").Op("..."),
+		)
 
 		for _, m := range s.Methods {
 			pathParts := strings.Split(m.Path, "/")

@@ -20,6 +20,10 @@ func (s *StrategyEcho) TransportConstruct() string {
 	return "NewEchoTransport"
 }
 
+func (s *StrategyEcho) TransportOptionsTypeName() string {
+	return "EchoTransportOption"
+}
+
 func (s *StrategyEcho) TransportPkg() string {
 	return "github.com/go-mosaic/runtime/transport/echo"
 }

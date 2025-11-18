@@ -34,6 +34,10 @@ func (g *Generator) generateType(t *gomosaic.TypeInfo) {
 		t = t.ElemType
 	}
 
+	if t.IsPtr {
+		t = t.ElemType
+	}
+
 	if !t.IsNamed {
 		return
 	}
