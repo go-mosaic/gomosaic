@@ -74,6 +74,85 @@ func (g *ServerGenerator) genOptionLoader(ifaceName string) jen.Code {
 	)
 }
 
+func (g *ServerGenerator) genQueryParamsFunc(
+	params []*annotation.MethodParamOpt,
+) jen.Code {
+	group := jen.NewFile("")
+
+	group.Id("q").Op(":=").Id("req").Dot("Queries").Call()
+
+	var transformCodes []jen.Code
+
+	for _, p := range params {
+
+		if p.Var.Type.IsNamed && p.Var.Type.ElemType.Struct != nil {
+			name := "param" + strcase.ToCamel(p.Name)
+
+			group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
+
+			for _, f := range p.Var.Type.ElemType.Struct.Fields {
+				if !f.Type.IsBasic && !f.Type.IsSlice {
+					continue
+				}
+
+				tag, err := f.Tags.Get("json")
+				if err == nil {
+					if f.Type.IsSlice {
+						valueID := jen.Id("q").Index(jen.Lit(tag.Name))
+
+						group.Id(name).Dot(f.Name).Op("=").Make(jenutils.TypeInfoQual(f.Type, g.qualifier.Qual), jen.Len(valueID))
+
+						group.For(jen.List(jen.Id("i"), jen.Id("val")).Op(":=").Range().Add(valueID)).BlockFunc(func(group *jen.Group) {
+
+							group.Add(
+								typetransform.For(f.Type.ElemType).
+									SetAssignID(jen.Id(name).Dot(f.Name).Index(jen.Id("i"))).
+									SetValueID(jen.Id("val")).
+									SetErrStatements(
+										jen.Return(jen.Err()),
+									).Parse(),
+							)
+
+						})
+
+					} else {
+						valueID := jen.Id("q").Dot("Get").Call(jen.Lit(tag.Name))
+
+						transformCodes = append(transformCodes, typetransform.For(f.Type).
+							SetAssignID(jen.Id(name).Dot(f.Name)).
+							SetValueID(valueID).
+							SetErrStatements(
+								jen.Return(jen.Err()),
+							).Parse(),
+						)
+					}
+
+				}
+			}
+		} else {
+			name := "param" + strcase.ToCamel(p.Name)
+
+			group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
+
+			valueID := jen.Id("q").Dot("Get").Call(jen.Lit(name))
+
+			transformCodes = append(transformCodes, typetransform.For(p.Var.Type).
+				SetAssignID(jen.Id(name)).
+				SetValueID(valueID).
+				SetErrStatements(
+					jen.Return(jen.Err()),
+				).Parse(),
+			)
+		}
+	}
+
+	for _, c := range transformCodes {
+		group.Add(c)
+	}
+
+	return group
+}
+
 func (g *ServerGenerator) genNonBodyParamsFunc(
 	params []*annotation.MethodParamOpt,
 	valueFn func(name string) jen.Code,
@@ -83,17 +162,41 @@ func (g *ServerGenerator) genNonBodyParamsFunc(
 	var transformCodes []jen.Code
 
 	for _, p := range params {
-		name := "param" + strcase.ToCamel(p.Name)
 
-		group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
+		if p.Var.Type.IsNamed && p.Var.Type.ElemType.Struct != nil {
+			name := "param" + strcase.ToCamel(p.Name)
 
-		transformCodes = append(transformCodes, typetransform.For(p.Var.Type).
-			SetAssignID(jen.Id(name)).
-			SetValueID(valueFn(strcase.ToLowerCamel(p.Name))).
-			SetErrStatements(
-				jen.Return(jen.Err()),
-			).Parse(),
-		)
+			group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
+
+			for _, f := range p.Var.Type.ElemType.Struct.Fields {
+				if !f.Type.IsBasic {
+					continue
+				}
+
+				tag, err := f.Tags.Get("json")
+				if err == nil {
+					transformCodes = append(transformCodes, typetransform.For(f.Type).
+						SetAssignID(jen.Id(name).Dot(f.Name)).
+						SetValueID(valueFn(strcase.ToLowerCamel(tag.Name))).
+						SetErrStatements(
+							jen.Return(jen.Err()),
+						).Parse(),
+					)
+				}
+			}
+		} else {
+			name := "param" + strcase.ToCamel(p.Name)
+
+			group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
+
+			transformCodes = append(transformCodes, typetransform.For(p.Var.Type).
+				SetAssignID(jen.Id(name)).
+				SetValueID(valueFn(strcase.ToLowerCamel(p.Name))).
+				SetErrStatements(
+					jen.Return(jen.Err()),
+				).Parse(),
+			)
+		}
 	}
 
 	for _, c := range transformCodes {
@@ -297,11 +400,7 @@ func (g *ServerGenerator) genRegisterHandlers(s *annotation.IfaceOpt) jen.Code {
 						// TODO: cookie
 
 						if len(m.QueryParams) > 0 {
-							group.Id("q").Op(":=").Id("req").Dot("Queries").Call()
-
-							group.Add(g.genNonBodyParamsFunc(m.QueryParams, func(name string) jen.Code {
-								return jen.Id("q").Dot("Get").Call(jen.Lit(name))
-							}))
+							group.Add(g.genQueryParamsFunc(m.QueryParams))
 						}
 
 						if len(m.PathParams) > 0 {
