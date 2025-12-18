@@ -554,18 +554,27 @@ func (g *ClientGenerator) genExecuteMethod(methodOpt *annotation.MethodOpt) jen.
 					}
 				}
 
-				group.If(
-					jen.Err().Op(":=").Qual(annotation.JSONPkg, "NewDecoder").Call(jen.Id("reader")).Dot("Decode").Call(jen.Op("&").Id("respBody")),
-					jen.Err().Op("!=").Nil(),
-				).Block(
-					g.genTrace(
-						g.genAddEventTrace(jen.Lit("JSON decode error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
-						g.genSetStatusErrorTrace(jen.Lit("failed read response")),
-					),
-					jen.Return(
-						annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
-					),
-				)
+				isBytesResult := len(methodOpt.BodyResults) == 1 && methodOpt.BodyResults[0].Var.Type.IsSlice && methodOpt.BodyResults[0].Var.Type.ElemType.IsBasic && methodOpt.BodyResults[0].Var.Type.ElemType.BasicKind == gomosaic.Byte
+
+				if isBytesResult {
+					group.List(jen.Id("respBody"), jen.Err()).Op("=").Qual("io", "ReadAll").Call(jen.Id("reader"))
+					group.If(jen.Err().Op("!=").Nil()).Block(
+						jen.Return(jen.Nil(), jen.Err()),
+					)
+				} else {
+					group.If(
+						jen.Err().Op(":=").Qual(annotation.JSONPkg, "NewDecoder").Call(jen.Id("reader")).Dot("Decode").Call(jen.Op("&").Id("respBody")),
+						jen.Err().Op("!=").Nil(),
+					).Block(
+						g.genTrace(
+							g.genAddEventTrace(jen.Lit("JSON decode error"), jen.Qual(annotation.OtelTraceAttrPkg, "String").Call(jen.Lit("reason"), jen.Err().Dot("Error").Call())),
+							g.genSetStatusErrorTrace(jen.Lit("failed read response")),
+						),
+						jen.Return(
+							annotation.MakeEmptyResults(methodOpt.BodyResults, g.qual, jen.Err())...,
+						),
+					)
+				}
 
 				group.Add(
 					g.genTrace(
