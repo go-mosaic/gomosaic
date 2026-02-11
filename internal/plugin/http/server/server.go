@@ -38,7 +38,7 @@ func (g *ServerGenerator) genServiceOptions(services []*annotation.IfaceOpt) jen
 func (g *ServerGenerator) genTypeOptions(optionsName string, middlewareType jen.Code, methods []*annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
-	transportOptions := jen.Do(g.qualifier.Qual(g.strategy.TransportPkg(), g.strategy.TransportOptionsTypeName()))
+	transportOptions := jen.Do(g.qualifier.Qual(gomosaic.TransportPkg, "TransportOption"))
 
 	group.Type().Id(optionsName).StructFunc(func(group *jen.Group) {
 		group.Id("transportOptions").Index().Add(transportOptions)
@@ -84,7 +84,6 @@ func (g *ServerGenerator) genQueryParamsFunc(
 	var transformCodes []jen.Code
 
 	for _, p := range params {
-
 		if p.Var.Type.IsNamed && p.Var.Type.ElemType.Struct != nil {
 			name := "param" + strcase.ToCamel(p.Name)
 
@@ -134,7 +133,12 @@ func (g *ServerGenerator) genQueryParamsFunc(
 
 			group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
 
-			valueID := jen.Id("q").Dot("Get").Call(jen.Lit(name))
+			queryName := p.Name
+			if p.NameOpt.Value != "" {
+				queryName = p.NameOpt.Value
+			}
+
+			valueID := jen.Id("q").Dot("Get").Call(jen.Lit(queryName))
 
 			transformCodes = append(transformCodes, typetransform.For(p.Var.Type).
 				SetAssignID(jen.Id(name)).
@@ -189,9 +193,14 @@ func (g *ServerGenerator) genNonBodyParamsFunc(
 
 			group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qualifier.Qual))
 
+			valueName := strcase.ToLowerCamel(p.Name)
+			if p.NameOpt.Value != "" {
+				valueName = p.NameOpt.Value
+			}
+
 			transformCodes = append(transformCodes, typetransform.For(p.Var.Type).
 				SetAssignID(jen.Id(name)).
-				SetValueID(valueFn(strcase.ToLowerCamel(p.Name))).
+				SetValueID(valueFn(valueName)).
 				SetErrStatements(
 					jen.Return(jen.Err()),
 				).Parse(),
@@ -368,10 +377,15 @@ func (g *ServerGenerator) genRegisterHandlers(s *annotation.IfaceOpt) jen.Code {
 	).BlockFunc(func(group *jen.Group) {
 		group.Add(g.genOptionLoader(s.NameTypeInfo.Name))
 
-		group.Id("tr").Op(":=").Qual(g.strategy.TransportPkg(), g.strategy.TransportConstruct()).Call(
-			jen.Id("router"),
+		group.Id("transportFactory").Op(":=").Qual(gomosaic.TransportFactoryPkg, "NewFactory").Call(
 			jen.Id("opt").Dot("transportOptions").Op("..."),
 		)
+
+		group.List(jen.Id("tr"), jen.Err()).Op(":=").Id("transportFactory").Dot("Create").Call(
+			jen.Qual(gomosaic.TransportFactoryPkg, g.strategy.TransportFactoryType()),
+			jen.Id("router"),
+		)
+		group.If(jen.Err().Op("!=").Nil()).Block(jen.Panic(jen.Err()))
 
 		for _, m := range s.Methods {
 			pathParts := strings.Split(m.Path, "/")

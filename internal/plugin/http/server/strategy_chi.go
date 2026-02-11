@@ -16,16 +16,8 @@ func (s *StrategyChi) Pkg() string {
 	return "github.com/go-chi/chi/v5"
 }
 
-func (s *StrategyChi) TransportConstruct() string {
-	return "NewChiTransport"
-}
-
-func (s *StrategyChi) TransportOptionsTypeName() string {
-	return "ChiTransportOption"
-}
-
-func (s *StrategyChi) TransportPkg() string {
-	return "github.com/go-mosaic/runtime/transport/chi"
+func (s *StrategyChi) TransportFactoryType() string {
+	return "TransportTypeChi"
 }
 
 func (*StrategyChi) PathParamWrap(paramName string) string {

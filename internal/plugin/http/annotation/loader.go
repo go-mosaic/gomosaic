@@ -173,7 +173,9 @@ type DefaultOpt struct {
 type IfaceOpt struct {
 	Default DefaultOpt `option:"default"`
 	// @docgen-title "Включение копирования типов в сгенерированного клиента"
-	CopyDTOTypes bool `option:"copy-dto-types,asFlag"`
+	CopyTypes bool `option:"copy-types,asFlag"`
+	// @docgen-title "Включение генерации клиента"
+	ClientEnable bool `option:"client-enable,asFlag"`
 
 	NameTypeInfo *gomosaic.NameTypeInfo
 	Methods      []*MethodOpt

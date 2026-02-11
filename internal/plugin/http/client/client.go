@@ -54,18 +54,31 @@ func (g *ClientGenerator) Generate(services []*annotation.IfaceOpt) (jen.Code, e
 
 	structGen := structure.NewGenerator(group)
 
+	var clientServices []*annotation.IfaceOpt
+
 	for _, s := range services {
-		if s.CopyDTOTypes {
-			group.Add(g.genClientDTO(structGen, s))
+		if !s.ClientEnable {
+			continue
 		}
+
+		clientServices = append(clientServices, s)
 	}
 
-	g.rewriteTypes = structGen.Processed()
+	if len(clientServices) > 0 {
+		for _, s := range clientServices {
+			if s.CopyTypes {
+				group.Add(g.genClientDTO(structGen, s))
+			}
+		}
 
-	for _, s := range services {
-		group.Add(g.genClientStruct(s))
-		group.Add(g.genClientConstruct(s))
-		group.Add(g.genClientEndpoints(s))
+		g.rewriteTypes = structGen.Processed()
+
+		for _, s := range clientServices {
+
+			group.Add(g.genClientStruct(s))
+			group.Add(g.genClientConstruct(s))
+			group.Add(g.genClientEndpoints(s))
+		}
 	}
 
 	return group, nil
@@ -154,29 +167,99 @@ func (g *ClientGenerator) genMakeBodyRequetsMethod(methodOpt *annotation.MethodO
 	return group
 }
 
+func (g *ClientGenerator) genQueryParamsForNamed(fldName string, fields []*gomosaic.VarInfo) jen.Code {
+	group := jen.NewFile("")
+
+	for _, f := range fields {
+		if !f.Type.IsBasic && !f.Type.IsSlice {
+			continue
+		}
+
+		if tag, err := f.Tags.Get("json"); err == nil {
+			if f.Type.IsSlice {
+				valueID := jen.Id("r").Dot("params").Dot(fldName).Dot(f.Name)
+
+				group.Id("q").Index(jen.Lit(tag.Name)).Op("=").Make(jenutils.TypeInfoQual(f.Type, g.qualifier.Qual), jen.Len(valueID))
+
+				group.For(jen.List(jen.Id("i"), jen.Id("val")).Op(":=").Range().Add(valueID)).BlockFunc(func(group *jen.Group) {
+					group.Add(
+						typetransform.For(f.Type.ElemType).
+							SetAssignID(jen.Id("q").Index(jen.Lit(tag.Name)).Index(jen.Id("i"))).
+							SetValueID(jen.Id("val")).
+							SetErrStatements(
+								jen.Return(jen.Err()),
+							).Parse(),
+					)
+				})
+
+			} else {
+				valueID := jen.Id("r").Dot("params").Dot(fldName).Dot(f.Name)
+
+				code := typetransform.For(f.Type).
+					SetValueID(valueID).
+					SetQualFunc(g.qual).
+					Format()
+
+				queryAdd := jen.Id("q").Dot("Add").Call(jen.Lit(tag.Name), code)
+
+				group.Add(queryAdd)
+			}
+		}
+	}
+
+	return group
+}
+
+func (g *ClientGenerator) genQueryParamsForField(fldName string, p *annotation.MethodParamOpt) jen.Code {
+	group := jen.NewFile("")
+
+	paramID := jen.Id(recvName).Dot("params").Dot(p.Var.Name)
+
+	if !p.Required {
+		paramID = jen.Call(jen.Op("*").Add(paramID))
+	}
+
+	code := typetransform.For(p.Var.Type).
+		SetValueID(paramID).
+		SetQualFunc(g.qual).
+		Format()
+
+	name := p.Name
+	if p.NameOpt.Value != "" {
+		name = p.NameOpt.Value
+	}
+
+	queryAdd := jen.Id("q").Dot("Add").Call(jen.Lit(name), code)
+	if !p.Required {
+		queryAdd = jen.If(jen.Id(recvName).Dot("params").Dot(p.Var.Name).Op("!=").Nil()).Block(queryAdd)
+	}
+
+	group.Add(queryAdd)
+
+	return group
+}
+
 func (g *ClientGenerator) genQueryParams(methodOpt *annotation.MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	group.Id("q").Op(":=").Id("req").Dot("URL").Dot("Query").Call()
 
-	for _, param := range methodOpt.QueryParams {
-		paramID := jen.Id(recvName).Dot("params").Dot(param.Var.Name)
+	for _, p := range methodOpt.QueryParams {
+		fldName := strcase.ToLowerCamel(p.Name)
 
-		if !param.Required {
-			paramID = jen.Call(jen.Op("*").Add(paramID))
+		var blockCode jen.Code
+
+		if p.Var.Type.IsNamed && p.Var.Type.ElemType.Struct != nil {
+			blockCode = g.genQueryParamsForNamed(fldName, p.Var.Type.ElemType.Struct.Fields)
+		} else {
+			blockCode = g.genQueryParamsForField(fldName, p)
 		}
 
-		code := typetransform.For(param.Var.Type).
-			SetValueID(paramID).
-			SetQualFunc(g.qual).
-			Format()
-
-		queryAdd := jen.Id("q").Dot("Add").Call(jen.Lit(param.Name), code)
-		if !param.Required {
-			queryAdd = jen.If(jen.Id(recvName).Dot("params").Dot(param.Var.Name).Op("!=").Nil()).Block(queryAdd)
+		if !p.Required {
+			group.If(jen.Id("r").Dot("params").Dot(fldName).Op("!=").Nil()).Block(blockCode)
+		} else {
+			group.Add(blockCode)
 		}
-
-		group.Add(queryAdd)
 	}
 
 	group.Id("req").Dot("URL").Dot("RawQuery").Op("=").Id("q").Dot("Encode").Call()
@@ -812,11 +895,26 @@ func (g *ClientGenerator) genClientDTO(structGen *structure.Generator, ifaceOpt 
 	group := jen.NewFile("")
 
 	for _, m := range ifaceOpt.Methods {
-		for _, p := range m.BodyParams {
-			structGen.Generate(p.Var.Type)
+		for _, params := range [][]*annotation.MethodParamOpt{
+			m.BodyParams,
+			m.PathParams,
+			m.QueryParams,
+			m.CookieParams,
+			m.HeaderParams,
+		} {
+			for _, p := range params {
+				structGen.Generate(p.Var.Type)
+			}
 		}
-		for _, p := range m.BodyResults {
-			structGen.Generate(p.Var.Type)
+
+		for _, results := range [][]*annotation.MethodResultOpt{
+			m.BodyResults,
+			m.HeaderResults,
+			m.CookieResults,
+		} {
+			for _, p := range results {
+				structGen.Generate(p.Var.Type)
+			}
 		}
 	}
 

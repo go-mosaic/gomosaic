@@ -1,10 +1,11 @@
 package gomosaic
 
 const (
-	TransportPkg = "github.com/go-mosaic/runtime/transport"
-	SpanPkg      = "github.com/go-mosaic/runtime/span"
-	ClientPkg    = "github.com/go-mosaic/runtime/client"
-	RuntimePkg   = "github.com/go-mosaic/runtime"
+	TransportPkg        = "github.com/go-mosaic/runtime/transport"
+	TransportFactoryPkg = "github.com/go-mosaic/runtime/transport/factory"
+	SpanPkg             = "github.com/go-mosaic/runtime/span"
+	ClientPkg           = "github.com/go-mosaic/runtime/client"
+	RuntimePkg          = "github.com/go-mosaic/runtime"
 )
 
 func IsTime(typeInfo *TypeInfo) bool {
