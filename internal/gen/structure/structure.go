@@ -1,27 +1,32 @@
 package structure
 
 import (
+	"strings"
+
 	"github.com/dave/jennifer/jen"
 
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 )
 
-var knownImports = map[string]bool{
-	"time.Time":                   true,
-	"github.com/google/uuid.UUID": true,
-	"encoding/json.Number":        true,
-	"encoding/json.RawMessage":    true,
-}
+// var knownImports = map[string]bool{
+// 	"time.Time":                   true,
+// 	"github.com/google/uuid.UUID": true,
+// 	"encoding/json.Number":        true,
+// 	"encoding/json.RawMessage":    true,
+// 	"github.com/Uffe-Code/go-nullable/nullable.Nullable": true,
+// }
 
 type Generator struct {
-	f         *jen.File
-	processed map[string]bool
+	f          *jen.File
+	modulePath string
+	processed  map[string]bool
 }
 
-func NewGenerator(f *jen.File) *Generator {
+func NewGenerator(f *jen.File, modulePath string) *Generator {
 	return &Generator{
-		f:         f,
-		processed: make(map[string]bool),
+		f:          f,
+		modulePath: modulePath,
+		processed:  make(map[string]bool),
 	}
 }
 
@@ -42,9 +47,13 @@ func (g *Generator) generateType(t *gomosaic.TypeInfo) {
 		return
 	}
 
+	if !strings.HasPrefix(t.Package, g.modulePath) {
+		return
+	}
+
 	processedKey := t.Package + "." + t.Name
 
-	if g.processed[processedKey] || knownImports[processedKey] {
+	if g.processed[processedKey] {
 		return
 	}
 
@@ -98,10 +107,6 @@ func (g *Generator) generateStruct(name string, t *gomosaic.TypeInfo) {
 	})
 
 	for _, field := range t.Struct.Fields {
-		if knownImports[field.Type.Package+"."+field.Type.Name] {
-			continue
-		}
-
 		g.generateType(field.Type)
 	}
 }
@@ -125,8 +130,17 @@ func (g *Generator) getTypeExpr(t *gomosaic.TypeInfo) jen.Code {
 	case t.IsMap:
 		return jen.Map(g.getTypeExpr(t.KeyType)).Add(g.getTypeExpr(t.ElemType))
 	case t.IsNamed:
-		if knownImports[t.Package+"."+t.Name] {
-			return jen.Qual(t.Package, t.Name)
+		if !strings.HasPrefix(t.Package, g.modulePath) {
+			s := jen.Qual(t.Package, t.Name)
+			if t.IsInstantiated {
+				s.IndexFunc(func(group *jen.Group) {
+					for _, typeParam := range t.TypeParams {
+						group.Add(g.getTypeExpr(typeParam))
+					}
+				})
+			}
+
+			return s
 		}
 
 		return jen.Id(t.Name)

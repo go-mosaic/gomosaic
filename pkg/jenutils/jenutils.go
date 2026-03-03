@@ -48,6 +48,20 @@ func TypeInfoQual(typeInfo *gomosaic.TypeInfo, qual QualFunc) (s *jen.Statement)
 		return s.Index().Add(TypeInfoQual(typeInfo.ElemType, qual))
 	case typeInfo.IsNamed:
 		s.Do(qual(typeInfo.Package, typeInfo.Name))
+
+		if typeInfo.IsInstantiated {
+			s.IndexFunc(func(g *jen.Group) {
+				for _, typeParam := range typeInfo.TypeParams {
+
+					g.Add(TypeInfoQual(typeParam, qual))
+
+					// if typeParam.IsNamed {
+					// 	g.Do(qual(typeParam.Package, typeParam.Name))
+					// }
+				}
+			})
+		}
+
 		return s
 	}
 

@@ -1,0 +1,64 @@
+linters-settings:
+  staticcheck:
+    checks: ["all", "-SA1019"]
+  gosimple:
+    checks: ["all", "-S1001"]
+  gosec:
+    excludes:
+      - G112
+      - G115
+      - G114
+  funlen:
+    lines: 200
+    statements: 80
+  dupl:
+    threshold: 700
+  goconst:
+    min-occurrences: 4
+  exhaustive:
+    default-signifies-exhaustive: true
+  gci:
+    sections:
+      - standard
+      - default
+      - prefix(github.com/go-mosaic/runtime)
+linters:
+  disable-all: true
+  enable:
+    - gci
+    - dogsled
+    - dupl
+    - errcheck
+    - exhaustive
+    # - funlen
+    - goconst
+    - gocritic
+    # - gocyclo
+    - gofmt
+    - goimports
+    - mnd
+    - goprintffuncname
+    - gosec
+    - gosimple
+    - govet
+    - ineffassign
+    - misspell
+    - nakedret
+    - noctx
+    - nolintlint
+    - staticcheck
+    - stylecheck
+    - typecheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+run:
+  timeout: 5m
+
+issues:
+  exclude-dirs:
+    - internal/cli/deps
+  exclude-files:
+    - ".*_gen\\.go"
+    - ".*_test\\.go"

@@ -25,7 +25,7 @@ func (p *PluginClient) Generate(ctx context.Context, module *gomosaic.ModuleInfo
 
 	f := gomosaic.NewGoFile(module, outputDir)
 
-	clientGen := client.NewClientGenerator(f)
+	clientGen := client.NewClientGenerator(f, module.Path)
 	code, err := clientGen.Generate(a)
 	if err != nil {
 		errs = multierror.Append(errs, err)

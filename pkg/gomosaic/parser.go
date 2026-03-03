@@ -81,25 +81,30 @@ const (
 
 // TypeInfo описывает тип поля или параметра
 type TypeInfo struct {
-	Name      string         // Имя типа (например, "int", "MyStruct")
-	Package   string         // Пакет типа (например, "github.com/user/project/pkg")
-	BitSize   int            // представляет собой набор флагов, описывающих свойства базового типа.
-	IsBasic   bool           // Является ли тип базовым
-	BasicInfo BasicInfo      // вид базового типа.
-	BasicKind BasicKind      // свойства базового типа.
-	IsAlias   bool           // Является ли тип алиасом.
-	IsPtr     bool           // Является ли тип указателем.
-	IsSlice   bool           // Является ли тип слайсом.
-	IsArray   bool           // Является ли тип массивом.
-	ArrayLen  int            // Длина массива (если IsArray == true).
-	IsMap     bool           // Является ли тип мапой.
-	IsChan    bool           // Является ли тип каналом.
-	IsNamed   bool           // Является ли тип именованным (например type Name <тип>).
-	KeyType   *TypeInfo      // Тип ключа (если IsMap == true, может быть nil).
-	ElemType  *TypeInfo      // Тип элемента (для каналов, слайсов, массивов, мап, именованного типа и указателей).
-	Struct    *StructInfo    // Тип структуры (может быть nil).
-	Interface *InterfaceInfo // Тип интерфейса (может быть nil).
-	Signature *SignatureInfo // Тип сигнатуры функции (может быть nil).
+	Name           string         // Имя типа (например, "int", "MyStruct")
+	Package        string         // Пакет типа (например, "github.com/user/project/pkg")
+	BitSize        int            // представляет собой набор флагов, описывающих свойства базового типа.
+	IsBasic        bool           // Является ли тип базовым
+	BasicInfo      BasicInfo      // вид базового типа.
+	BasicKind      BasicKind      // свойства базового типа.
+	IsAlias        bool           // Является ли тип алиасом.
+	IsPtr          bool           // Является ли тип указателем.
+	IsSlice        bool           // Является ли тип слайсом.
+	IsArray        bool           // Является ли тип массивом.
+	ArrayLen       int            // Длина массива (если IsArray == true).
+	IsMap          bool           // Является ли тип мапой.
+	IsChan         bool           // Является ли тип каналом.
+	IsNamed        bool           // Является ли тип именованным (например type Name <тип>).
+	IsTypeParam    bool           // Является ли тип параметром типа (дженерик)
+	IsUnion        bool           // Является ли тип объединением (union)
+	IsInstantiated bool           // Является ли тип инстанцированным дженерик-типом
+	KeyType        *TypeInfo      // Тип ключа (если IsMap == true, может быть nil).
+	ElemType       *TypeInfo      // Тип элемента (для каналов, слайсов, массивов, мап, именованного типа и указателей).
+	Struct         *StructInfo    // Тип структуры (может быть nil).
+	Interface      *InterfaceInfo // Тип интерфейса (может быть nil).
+	Signature      *SignatureInfo // Тип сигнатуры функции (может быть nil).
+	TypeParams     []*TypeInfo    // Параметры типа для дженерик-типов (может быть nil)
+	UnionTerms     []*TypeInfo    // Термы объединения (union terms) (может быть nil)
 }
 
 // String возвращает строковое представление типа
@@ -124,8 +129,49 @@ func (t *TypeInfo) String() string {
 	}
 	result += t.Name
 
-	if t.ElemType != nil {
+	// Добавляем параметры типа для дженерик-типов (только для неинстанцированных типов)
+	if !t.IsInstantiated && len(t.TypeParams) > 0 {
+		result += "["
+		for i, param := range t.TypeParams {
+			if i > 0 {
+				result += ", "
+			}
+			result += param.String()
+		}
+		result += "]"
+	}
+
+	// Для инстанцированных типов показываем аргументы типа
+	if t.IsInstantiated && len(t.TypeParams) > 0 {
+		result += "["
+		for i, arg := range t.TypeParams {
+			if i > 0 {
+				result += ", "
+			}
+			result += arg.String()
+		}
+		result += "]"
+	}
+
+	// Добавляем термы объединения для union типов
+	if t.IsUnion && len(t.UnionTerms) > 0 {
+		result += "("
+		for i, term := range t.UnionTerms {
+			if i > 0 {
+				result += " | "
+			}
+			result += term.String()
+		}
+		result += ")"
+	}
+
+	if t.ElemType != nil && !t.IsTypeParam && !t.IsInstantiated {
 		result += t.ElemType.String()
+	}
+
+	// Для параметров типа добавляем ограничение
+	if t.IsTypeParam && t.ElemType != nil {
+		result += " " + t.ElemType.String()
 	}
 
 	return result
@@ -185,8 +231,9 @@ type InterfaceInfo struct {
 
 // SignatureInfo информация о сигнатуре функции
 type SignatureInfo struct {
-	Params  []*VarInfo
-	Results []*VarInfo
+	Params     []*VarInfo
+	Results    []*VarInfo
+	TypeParams []*TypeInfo
 }
 
 // PosInfo информация о положении типа в файле
@@ -475,12 +522,6 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 	case *types.Alias:
 		typeInfo.Name = t.Obj().Name()
 		typeInfo.IsAlias = true
-
-		// elemType, err := typeToTypeInfo(pkg, t.Obj().Type())
-		// if err != nil {
-		// return nil, err
-		// }
-		// typeInfo.ElemType = elemType
 	case *types.Chan:
 		typeInfo.Name = "chan"
 		typeInfo.IsChan = true
@@ -534,6 +575,25 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		if pkg := t.Obj().Pkg(); pkg != nil {
 			typeInfo.Package = pkg.Path()
 		}
+
+		if t.TypeArgs() != nil {
+			typeInfo.IsInstantiated = true
+			typeArgs := make([]*TypeInfo, 0, t.TypeArgs().Len())
+
+			for i := 0; i < t.TypeArgs().Len(); i++ {
+				typeArg := t.TypeArgs().At(i)
+
+				argInfo, err := typeToTypeInfo(pkg, typeArg)
+				if err != nil {
+					return nil, err
+				}
+
+				typeArgs = append(typeArgs, argInfo)
+			}
+
+			typeInfo.TypeParams = typeArgs
+		}
+
 		if t.Obj().Type() != nil {
 			named, err := typeToTypeInfo(pkg, t.Obj().Type().Underlying())
 			if err != nil {
@@ -590,6 +650,26 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 	case *types.Signature:
 		typeInfo.Name = "func"
 
+		var typeParams []*TypeInfo
+
+		// Обработка параметров типа для дженерик-функций
+		if t.TypeParams() != nil {
+			typeParams = make([]*TypeInfo, 0, t.TypeParams().Len())
+
+			for i := 0; i < t.TypeParams().Len(); i++ {
+				typeParam := t.TypeParams().At(i)
+
+				paramInfo, err := typeToTypeInfo(pkg, typeParam)
+				if err != nil {
+					return nil, err
+				}
+
+				typeParams = append(typeParams, paramInfo)
+			}
+
+			typeInfo.TypeParams = typeParams
+		}
+
 		paramVarsInfo, err := tuplesToVarsInfo(pkg, t.Params())
 		if err != nil {
 			return nil, err
@@ -601,9 +681,41 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		}
 
 		typeInfo.Signature = &SignatureInfo{
-			Params:  paramVarsInfo,
-			Results: resultVarsInfo,
+			Params:     paramVarsInfo,
+			Results:    resultVarsInfo,
+			TypeParams: typeParams,
 		}
+	case *types.TypeParam:
+		typeInfo.IsTypeParam = true
+		typeInfo.Name = t.Obj().Name()
+
+		if constraint := t.Constraint(); constraint != nil {
+			constraintInfo, err := typeToTypeInfo(pkg, constraint)
+
+			if err != nil {
+				return nil, err
+			}
+
+			typeInfo.ElemType = constraintInfo
+		}
+	case *types.Union:
+		typeInfo.IsUnion = true
+		typeInfo.Name = "union"
+
+		terms := make([]*TypeInfo, 0, t.Len())
+
+		for i := 0; i < t.Len(); i++ {
+			term := t.Term(i)
+			termInfo, err := typeToTypeInfo(pkg, term.Type())
+
+			if err != nil {
+				return nil, err
+			}
+
+			terms = append(terms, termInfo)
+		}
+
+		typeInfo.UnionTerms = terms
 	}
 
 	return typeInfo, nil

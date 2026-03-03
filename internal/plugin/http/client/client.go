@@ -26,12 +26,14 @@ type Qualifier interface {
 
 type ClientGenerator struct {
 	qualifier    Qualifier
+	modulePath   string
 	rewriteTypes map[string]bool
 }
 
-func NewClientGenerator(qualifier Qualifier) *ClientGenerator {
+func NewClientGenerator(qualifier Qualifier, modulePath string) *ClientGenerator {
 	return &ClientGenerator{
 		qualifier:    qualifier,
+		modulePath:   modulePath,
 		rewriteTypes: map[string]bool{},
 	}
 }
@@ -52,7 +54,7 @@ func (g *ClientGenerator) Generate(services []*annotation.IfaceOpt) (jen.Code, e
 
 	group.Add(g.genTypes())
 
-	structGen := structure.NewGenerator(group)
+	structGen := structure.NewGenerator(group, g.modulePath)
 
 	var clientServices []*annotation.IfaceOpt
 
