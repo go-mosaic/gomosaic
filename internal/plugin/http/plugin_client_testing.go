@@ -4,8 +4,6 @@ import (
 	"context"
 	_ "embed"
 
-	"github.com/jaswdr/faker/v2"
-
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/testclient"
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
@@ -24,10 +22,9 @@ func (p *PluginClientTesting) Generate(ctx context.Context, module *gomosaic.Mod
 	}
 
 	f := gomosaic.NewGoFile(module, outputDir, gomosaic.UseTestPkg())
+	f.ImportAlias(testclient.FakerPkg, "faker")
 
-	fake := faker.New()
-
-	clientTestGen := testclient.NewClientTest(fake, f.Qual)
+	clientTestGen := testclient.NewClientTest(f.Qual)
 	f.Add(clientTestGen.Generate(annotations, []testclient.Config{
 		{StatusCode: 200},                   //nolint: mnd
 		{StatusCode: 400, CheckError: true}, //nolint: mnd

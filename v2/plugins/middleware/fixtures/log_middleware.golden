@@ -1,0 +1,38 @@
+
+
+package middleware
+
+import (
+	"context"
+	fixtures "github.com/go-mosaic/gomosaic/v2/plugins/middleware/fixtures"
+	runtime "github.com/go-mosaic/runtime"
+	span "github.com/go-mosaic/runtime/span"
+)
+
+type UserServiceLogMiddleware struct {
+	next   fixtures.UserService
+	logger span.Logger
+}
+
+func LogUserServiceMiddleware(logger span.Logger) runtime.Middleware[fixtures.UserService] {
+	return func(next fixtures.UserService) fixtures.UserService {
+		return &UserServiceLogMiddleware{
+			logger: logger,
+			next:   next,
+		}
+	}
+}
+func (m *UserServiceLogMiddleware) CreateUser(ctx context.Context, name string) error {
+	span := span.StartLogSpan(m.logger, ctx)
+	err := m.next.CreateUser(ctx, name)
+	// Завершение лог-спана
+	span.Finish(ctx)
+	return err
+}
+func (m *UserServiceLogMiddleware) GetUser(ctx context.Context, id int) (string, error) {
+	span := span.StartLogSpan(m.logger, ctx)
+	user, err := m.next.GetUser(ctx, id)
+	// Завершение лог-спана
+	span.Finish(ctx)
+	return user, err
+}

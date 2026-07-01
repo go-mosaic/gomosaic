@@ -1,0 +1,35 @@
+
+
+package docs
+
+import (
+	"encoding/json"
+	"net/http"
+)
+
+// OpenAPIHandler возвращает HTTP-хендлер для OpenAPI-спецификации.
+func OpenAPIHandler() http.Handler {
+	var spec = map[string]interface{}{"openapi": "3.0.3", "info": map[string]interface{}{
+		"title":   "github.com/go-mosaic/gomosaic/v2",
+		"version": "1.0.0",
+	}, "/user/{id}": map[string]interface{}{"get": map[string]interface{}{
+		"operationId": "getUser",
+		"parameters": []interface{}{map[string]interface{}{
+			"in":       "path",
+			"name":     "id",
+			"required": true,
+			"schema": map[string]interface{}{
+				"format": "int32",
+				"type":   "integer",
+			},
+		}},
+		"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Успешный ответ"}},
+		"summary":   "GetUser UserService",
+		"tags":      []string{"users"},
+	}}}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		data, _ := json.MarshalIndent(spec, "", "  ")
+		w.Write(data)
+	})
+}

@@ -1,0 +1,53 @@
+
+
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+)
+
+func (c *Config) LoadFromEnv() error {
+	val, ok := os.LookupEnv("HOST")
+	if !ok {
+		return fmt.Errorf("переменная окружения HOST не установлена")
+	}
+	c.Host = val
+	val, ok := os.LookupEnv("PORT")
+	if !ok {
+		val = "8080"
+	}
+	v, err := strconv.Atoi(val)
+	if err != nil {
+		return fmt.Errorf("переменная окружения PORT: %w", err)
+	}
+	c.Port = int(v)
+	val, ok := os.LookupEnv("DEBUG")
+	if ok {
+		v, err := strconv.ParseBool(val)
+		if err != nil {
+			return fmt.Errorf("переменная окружения DEBUG: %w", err)
+		}
+		c.Debug = v
+	}
+	val, ok := os.LookupEnv("TIMEOUT")
+	if !ok {
+		val = "30s"
+	}
+	v, err := strconv.Atoi(val)
+	if err != nil {
+		return fmt.Errorf("переменная окружения TIMEOUT: %w", err)
+	}
+	c.Timeout = int(v)
+	val, ok := os.LookupEnv("RETRY_COUNT")
+	if !ok {
+		val = "3"
+	}
+	v, err := strconv.Atoi(val)
+	if err != nil {
+		return fmt.Errorf("переменная окружения RETRY_COUNT: %w", err)
+	}
+	c.RetryCount = int(v)
+	return nil
+}

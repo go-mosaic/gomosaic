@@ -1,0 +1,273 @@
+
+
+package client
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	full "github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full"
+	"io"
+	"net/http"
+)
+
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	ctx    context.Context
+	client *http.Client
+}
+
+func WithContext(ctx context.Context) ClientOption {
+	return func(o *clientOptions) {
+		o.ctx = ctx
+	}
+}
+
+type UserServiceClient struct {
+	target string
+	opts   clientOptions
+}
+
+func NewUserServiceClient(target string, opts ...ClientOption) *UserServiceClient {
+	r := &UserServiceClient{target: target}
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	return r
+}
+
+type UserServiceCreateUserRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+	req  *full.CreateUserRequest
+}
+
+func (r *UserServiceCreateUserRequest) SetReq(v *full.CreateUserRequest) *UserServiceCreateUserRequest {
+	r.req = v
+	return r
+}
+func (r *UserServiceCreateUserRequest) Execute(opts ...ClientOption) (string, *full.User, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	path := "/user"
+	req, err := http.NewRequestWithContext(ctx, "POST", r.c.target+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	reqBody, err := json.Marshal(struct {
+		Req *full.CreateUserRequest `json:"user_req,omitempty"`
+	}{Req: r.req})
+	if err != nil {
+		return nil, err
+	}
+	req.Body = io.NopCloser(bytes.NewReader(reqBody))
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		return nil, fmt.Errorf("http error %d", resp.StatusCode)
+	}
+	var respBody struct {
+		User *full.User `json:"user"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, err
+	}
+	return respBody.User, nil
+}
+func (r *UserServiceClient) CreateUser(req *full.CreateUserRequest) (string, *full.User, error) {
+	params := UserServiceCreateUserRequest{c: r}
+	params.SetReq(req)
+	return params.Execute()
+}
+
+type UserServiceDeleteUserRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+	id   int
+}
+
+func (r *UserServiceDeleteUserRequest) SetId(v int) *UserServiceDeleteUserRequest {
+	r.id = v
+	return r
+}
+func (r *UserServiceDeleteUserRequest) Execute(opts ...ClientOption) error {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	path := fmt.Sprintf("/user/{id}", r.id)
+	req, err := http.NewRequestWithContext(ctx, "DELETE", r.c.target+path, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		return fmt.Errorf("http error %d", resp.StatusCode)
+	}
+	return nil
+}
+func (r *UserServiceClient) DeleteUser(id int) error {
+	params := UserServiceDeleteUserRequest{c: r}
+	params.SetId(id)
+	return params.Execute()
+}
+
+type UserServiceGetUserRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+	id   int
+}
+
+func (r *UserServiceGetUserRequest) SetId(v int) *UserServiceGetUserRequest {
+	r.id = v
+	return r
+}
+func (r *UserServiceGetUserRequest) Execute(opts ...ClientOption) (*full.User, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	path := fmt.Sprintf("/user/{id}", r.id)
+	req, err := http.NewRequestWithContext(ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		return nil, fmt.Errorf("http error %d", resp.StatusCode)
+	}
+	var respBody struct {
+		User *full.User `json:"user"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, err
+	}
+	return respBody.User, nil
+}
+func (r *UserServiceClient) GetUser(id int) (*full.User, error) {
+	params := UserServiceGetUserRequest{c: r}
+	params.SetId(id)
+	return params.Execute()
+}
+
+type UserServiceListUsersRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+}
+
+func (r *UserServiceListUsersRequest) Execute(opts ...ClientOption) ([]full.User, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	path := "/users"
+	req, err := http.NewRequestWithContext(ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		return nil, fmt.Errorf("http error %d", resp.StatusCode)
+	}
+	var respBody struct {
+		Users []full.User `json:"users"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, err
+	}
+	return respBody.Users, nil
+}
+func (r *UserServiceClient) ListUsers([]full.User, error) {
+	params := UserServiceListUsersRequest{c: r}
+	return params.Execute()
+}
+
+type UserServiceSearchUsersRequest struct {
+	c      *UserServiceClient
+	opts   clientOptions
+	query  string
+	limit  int
+	offset int
+}
+
+func (r *UserServiceSearchUsersRequest) SetQuery(v string) *UserServiceSearchUsersRequest {
+	r.query = v
+	return r
+}
+func (r *UserServiceSearchUsersRequest) SetLimit(v int) *UserServiceSearchUsersRequest {
+	r.limit = v
+	return r
+}
+func (r *UserServiceSearchUsersRequest) SetOffset(v int) *UserServiceSearchUsersRequest {
+	r.offset = v
+	return r
+}
+func (r *UserServiceSearchUsersRequest) Execute(opts ...ClientOption) ([]full.User, int, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	path := "/search"
+	req, err := http.NewRequestWithContext(ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		return nil, 0, err
+	}
+	q := req.URL.Query()
+	q.Set("query", fmt.Sprintf("%v", r.query))
+	q.Set("limit_val", fmt.Sprintf("%v", r.limit))
+	req.URL.RawQuery = q.Encode()
+	req.Header.Set("X-Offset", fmt.Sprintf("%v", r.offset))
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		return nil, 0, err
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		return nil, 0, fmt.Errorf("http error %d", resp.StatusCode)
+	}
+	var respBody struct {
+		Users []full.User `json:"users"`
+		Total int         `json:"total"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, 0, err
+	}
+	return respBody.Users, respBody.Total, nil
+}
+func (r *UserServiceClient) SearchUsers(query string, limit int, offset int) ([]full.User, int, error) {
+	params := UserServiceSearchUsersRequest{c: r}
+	params.SetQuery(query)
+	params.SetLimit(limit)
+	params.SetOffset(offset)
+	return params.Execute()
+}

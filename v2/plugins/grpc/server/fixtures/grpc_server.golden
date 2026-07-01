@@ -1,0 +1,29 @@
+
+
+package grpc
+
+import (
+	"context"
+	fixtures "github.com/go-mosaic/gomosaic/v2/plugins/grpc/server/fixtures"
+	runtime "github.com/go-mosaic/runtime"
+	grpc "google.golang.org/grpc"
+)
+
+// RegisterUserServiceServer регистрирует gRPC-сервер.
+func RegisterUserServiceServer(s *grpc.Server, svc fixtures.UserService, mw ...runtime.Middleware[fixtures.UserService]) {
+	userServiceServer := &UserServiceServer{svc: svc}
+	grpc.RegisterUserServiceServer(s, userServiceServer)
+}
+
+type UserServiceServer struct {
+	svc        fixtures.UserService
+	middleware []runtime.Middleware[fixtures.UserService]
+}
+
+func (s *UserServiceServer) GetUser(ctx context.Context, req *fixtures.GetUserRequest) (*fixtures.User, error) {
+	resp, err := s.svc.GetUser(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}

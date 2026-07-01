@@ -1,0 +1,28 @@
+
+
+package model
+
+import (
+	"fmt"
+	"regexp"
+)
+
+func (v *User) Validate() error {
+	var errs error
+	if v.Name == "" {
+		return fmt.Errorf("Name: обязательное поле")
+	}
+	if v.Email == "" {
+		return fmt.Errorf("Email: обязательное поле")
+	}
+	if !regexp.MustCompile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$").MatchString(v.Email) {
+		return fmt.Errorf("Email: невалидный email")
+	}
+	if v.Age == 0 {
+		return fmt.Errorf("Age: обязательное поле")
+	}
+	if !regexp.MustCompile("^https?://").MatchString(v.Website) {
+		return fmt.Errorf("Website: невалидный URL")
+	}
+	return errs
+}

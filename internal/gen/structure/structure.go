@@ -8,14 +8,6 @@ import (
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
 )
 
-// var knownImports = map[string]bool{
-// 	"time.Time":                   true,
-// 	"github.com/google/uuid.UUID": true,
-// 	"encoding/json.Number":        true,
-// 	"encoding/json.RawMessage":    true,
-// 	"github.com/Uffe-Code/go-nullable/nullable.Nullable": true,
-// }
-
 type Generator struct {
 	f          *jen.File
 	modulePath string

@@ -1,0 +1,81 @@
+
+
+package client
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	fixtures "github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures"
+	"net/http"
+)
+
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	ctx    context.Context
+	client *http.Client
+}
+
+func WithContext(ctx context.Context) ClientOption {
+	return func(o *clientOptions) {
+		o.ctx = ctx
+	}
+}
+
+type UserServiceClient struct {
+	target string
+	opts   clientOptions
+}
+
+func NewUserServiceClient(target string, opts ...ClientOption) *UserServiceClient {
+	r := &UserServiceClient{target: target}
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	return r
+}
+
+type UserServiceGetUserRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+	id   int
+}
+
+func (r *UserServiceGetUserRequest) SetId(v int) *UserServiceGetUserRequest {
+	r.id = v
+	return r
+}
+func (r *UserServiceGetUserRequest) Execute(opts ...ClientOption) (*fixtures.User, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	path := fmt.Sprintf("/user/{id}", r.id)
+	req, err := http.NewRequestWithContext(ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		return nil, fmt.Errorf("http error %d", resp.StatusCode)
+	}
+	var respBody struct {
+		User *fixtures.User `json:"user"`
+	}
+	if err = json.NewDecoder(resp.Body).Decode(&respBody); err != nil {
+		return nil, err
+	}
+	return respBody.User, nil
+}
+func (r *UserServiceClient) GetUser(id int) (*fixtures.User, error) {
+	params := UserServiceGetUserRequest{c: r}
+	params.SetId(id)
+	return params.Execute()
+}

@@ -1,0 +1,201 @@
+
+
+package client_test
+
+import (
+	"context"
+	"encoding/json"
+	fixtures "github.com/go-mosaic/gomosaic/v2/plugins/http/testclient/fixtures"
+	runtime "github.com/go-mosaic/runtime"
+	faker "github.com/jaswdr/faker/v2"
+	"net/http"
+	"net/http/httptest"
+	"testing"
+)
+
+func ptr[T any](t T) *T {
+	return &t
+}
+func TestUserService_CreateUser_200(t *testing.T) {
+	serverResponse := &fixtures.User{Name: faker.New().Lorem().Sentence(10), Email: faker.New().Lorem().Sentence(10)}
+	var serverRequest struct {
+		Req *fixtures.CreateUserRequest
+	}
+	serverRequest.Req = &fixtures.CreateUserRequest{Name: faker.New().Lorem().Sentence(10), Email: faker.New().Lorem().Sentence(10)}
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/user", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Req *fixtures.CreateUserRequest `json:"req"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Req.Name != serverRequest.Req.Name {
+			t.Fatal("failed equal method (service.UserService).CreateUser Name")
+		}
+		if body.Req.Email != serverRequest.Req.Email {
+			t.Fatal("failed equal method (service.UserService).CreateUser Email")
+		}
+		w.WriteHeader(200)
+		data, _ := json.Marshal(struct {
+			User *fixtures.User `json:"user"`
+		}{User: serverResponse})
+		w.Write(data)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "CreateUser", 200)
+	user, err := client.CreateUser(context.TODO(), serverRequest.Req)
+	if err != nil {
+		t.Fatalf("%s: %s", "failed execute method (service.UserService).CreateUser", err)
+	}
+}
+func TestUserService_CreateUser_400(t *testing.T) {
+	var serverRequest struct {
+		Req *fixtures.CreateUserRequest
+	}
+	serverRequest.Req = &fixtures.CreateUserRequest{Name: faker.New().Lorem().Sentence(10), Email: faker.New().Lorem().Sentence(10)}
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/user", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Req *fixtures.CreateUserRequest `json:"req"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		if body.Req.Name != serverRequest.Req.Name {
+			t.Fatal("failed equal method (service.UserService).CreateUser Name")
+		}
+		if body.Req.Email != serverRequest.Req.Email {
+			t.Fatal("failed equal method (service.UserService).CreateUser Email")
+		}
+		w.WriteHeader(400)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "CreateUser", 400)
+	_, err := client.CreateUser(context.TODO(), serverRequest.Req)
+	if err == nil {
+		t.Fatal("failed execute method (service.UserService).CreateUser error is nil")
+	}
+}
+func TestUserService_DeleteUser_200(t *testing.T) {
+	var idPath int = faker.New().RandomNumber(5)
+
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/user/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var idPathReq int
+		if err := runtime.ParseInt(r.PathValue("id"), 10, 64, &idPathReq); err != nil {
+			t.Fatal(err)
+		}
+		if idPath != idPathReq {
+			t.Fatal("failed equal method (service.UserService).DeleteUser id")
+		}
+		w.WriteHeader(200)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "DeleteUser", 200)
+	err := client.DeleteUser(context.TODO(), idPath)
+	if err != nil {
+		t.Fatalf("%s: %s", "failed execute method (service.UserService).DeleteUser", err)
+	}
+}
+func TestUserService_DeleteUser_400(t *testing.T) {
+	var idPath int = faker.New().RandomNumber(5)
+
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/user/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var idPathReq int
+		if err := runtime.ParseInt(r.PathValue("id"), 10, 64, &idPathReq); err != nil {
+			t.Fatal(err)
+		}
+		if idPath != idPathReq {
+			t.Fatal("failed equal method (service.UserService).DeleteUser id")
+		}
+		w.WriteHeader(400)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "DeleteUser", 400)
+	err := client.DeleteUser(context.TODO(), idPath)
+	if err == nil {
+		t.Fatal("failed execute method (service.UserService).DeleteUser error is nil")
+	}
+}
+func TestUserService_GetUser_200(t *testing.T) {
+	serverResponse := &fixtures.User{Name: faker.New().Lorem().Sentence(10), Email: faker.New().Lorem().Sentence(10)}
+	var idPath int = faker.New().RandomNumber(5)
+
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/user/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var idPathReq int
+		if err := runtime.ParseInt(r.PathValue("id"), 10, 64, &idPathReq); err != nil {
+			t.Fatal(err)
+		}
+		if idPath != idPathReq {
+			t.Fatal("failed equal method (service.UserService).GetUser id")
+		}
+		w.WriteHeader(200)
+		data, _ := json.Marshal(struct {
+			User *fixtures.User `json:"user"`
+		}{User: serverResponse})
+		w.Write(data)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "GetUser", 200)
+	user, err := client.GetUser(context.TODO(), idPath)
+	if err != nil {
+		t.Fatalf("%s: %s", "failed execute method (service.UserService).GetUser", err)
+	}
+}
+func TestUserService_GetUser_400(t *testing.T) {
+	var idPath int = faker.New().RandomNumber(5)
+
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/user/{id}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var idPathReq int
+		if err := runtime.ParseInt(r.PathValue("id"), 10, 64, &idPathReq); err != nil {
+			t.Fatal(err)
+		}
+		if idPath != idPathReq {
+			t.Fatal("failed equal method (service.UserService).GetUser id")
+		}
+		w.WriteHeader(400)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "GetUser", 400)
+	_, err := client.GetUser(context.TODO(), idPath)
+	if err == nil {
+		t.Fatal("failed execute method (service.UserService).GetUser error is nil")
+	}
+}
+func TestUserService_ListUsers_200(t *testing.T) {
+	serverResponse := []fixtures.User{}
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/users", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(200)
+		data, _ := json.Marshal(struct {
+			Users []fixtures.User `json:"users"`
+		}{Users: serverResponse})
+		w.Write(data)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "ListUsers", 200)
+	users, err := client.ListUsers(context.TODO())
+	if err != nil {
+		t.Fatalf("%s: %s", "failed execute method (service.UserService).ListUsers", err)
+	}
+}
+func TestUserService_ListUsers_400(t *testing.T) {
+	mockServer := http.NewServeMux()
+	mockServer.Handle("/users", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(400)
+	}))
+
+	server := httptest.NewServer(mockServer)
+	client := createUserServiceClient(server.URL, "ListUsers", 400)
+	_, err := client.ListUsers(context.TODO())
+	if err == nil {
+		t.Fatal("failed execute method (service.UserService).ListUsers error is nil")
+	}
+}

@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/dave/jennifer/jen"
-	"github.com/jaswdr/faker/v2"
 
 	"github.com/go-mosaic/gomosaic/internal/plugin/http/annotation"
 	"github.com/go-mosaic/gomosaic/pkg/flatten"
@@ -20,21 +19,22 @@ type Config struct {
 	CheckError bool
 }
 
+const FakerPkg = "github.com/jaswdr/faker/v2"
+
 type ClientTestGenerator struct {
-	fake   faker.Faker
 	qualFn jenutils.QualFunc
 }
 
 func (g *ClientTestGenerator) basicTypeToValue(typeInfo *gomosaic.TypeInfo) jen.Code {
 	switch typeInfo.BasicInfo {
 	default:
-		return jen.Lit(g.fake.Lorem().Sentence(10)) //nolint: mnd
+		return jen.Qual(FakerPkg, "New").Call().Dot("Lorem").Call().Dot("Sentence").Call(jen.Lit(10)) //nolint: mnd
 	case gomosaic.IsBoolean:
 		return jen.Lit(true)
 	case gomosaic.IsInteger, gomosaic.IsInteger | gomosaic.IsUnsigned:
-		return jen.Lit(g.fake.RandomNumber(5)) //nolint: mnd
+		return jen.Qual(FakerPkg, "New").Call().Dot("RandomNumber").Call(jen.Lit(5)) //nolint: mnd
 	case gomosaic.IsFloat:
-		return jen.Lit(g.fake.Float64(2, 1, 100)) //nolint: mnd
+		return jen.Qual(FakerPkg, "New").Call().Dot("Float64").Call(jen.Lit(2), jen.Lit(1), jen.Lit(100)) //nolint: mnd
 	}
 }
 
@@ -351,7 +351,8 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *annotation.MethodO
 					group.Id("w").Dot("WriteHeader").Call(jen.Lit(cfg.StatusCode))
 				}
 				if !cfg.CheckError && len(methodOpt.BodyResults) > 0 {
-					group.List(jen.Id("data"), jen.Id("_")).Op(":=").Qual("encoding/json", "Marshal").Call(jen.Id("serverResponse"))
+					responseData := g.buildResponseData(methodOpt)
+					group.List(jen.Id("data"), jen.Id("_")).Op(":=").Qual("encoding/json", "Marshal").Call(responseData)
 					group.Id("w").Dot("Write").Call(jen.Id("data"))
 				}
 
@@ -364,6 +365,43 @@ func (g ClientTestGenerator) genMockServerGenerate(methodOpt *annotation.MethodO
 	).Line()
 
 	return group
+}
+
+// buildResponseData создаёт выражение для маршалинга ответа сервера.
+func (g *ClientTestGenerator) buildResponseData(methodOpt *annotation.MethodOpt) jen.Code {
+	if len(methodOpt.BodyResults) == 1 && methodOpt.Single.Resp {
+		return jen.Id("serverResponse")
+	}
+
+	innerStruct := annotation.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qualFn)
+	innerValue := jen.DictFunc(func(d jen.Dict) {
+		for _, r := range methodOpt.BodyResults {
+			d[jen.Id(strcase.ToCamel(r.Var.Name))] = jen.Id("serverResponse")
+		}
+	})
+
+	if len(methodOpt.WrapResp.PathParts) == 0 {
+		return jen.StructFunc(func(g *jen.Group) {
+			g.Add(innerStruct)
+		}).Values(innerValue)
+	}
+
+	typeCode := innerStruct
+	valueDict := innerValue
+
+	for i := len(methodOpt.WrapResp.PathParts) - 1; i >= 0; i-- {
+		partName := methodOpt.WrapResp.PathParts[i]
+		camelName := strcase.ToCamel(partName)
+
+		typeCode = jen.Id(camelName).Struct(typeCode).Tag(map[string]string{"json": partName})
+		valueDict = jen.Dict{
+			jen.Id(camelName): jen.Values(valueDict),
+		}
+	}
+
+	return jen.StructFunc(func(g *jen.Group) {
+		g.Add(typeCode)
+	}).Values(valueDict)
 }
 
 func (g *ClientTestGenerator) genCheckError(methodOpt *annotation.MethodOpt, cfg Config) jen.Code {
@@ -524,11 +562,9 @@ func (g *ClientTestGenerator) Generate(ifaceOpts []*annotation.IfaceOpt, configs
 }
 
 func NewClientTest(
-	fake faker.Faker,
 	qualFn jenutils.QualFunc,
 ) *ClientTestGenerator {
 	return &ClientTestGenerator{
-		fake:   fake,
 		qualFn: qualFn,
 	}
 }

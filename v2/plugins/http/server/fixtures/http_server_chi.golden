@@ -1,0 +1,61 @@
+
+
+package controller
+
+import (
+	v5 "github.com/go-chi/chi/v5"
+	fixtures "github.com/go-mosaic/gomosaic/v2/plugins/http/server/fixtures"
+	runtime "github.com/go-mosaic/runtime"
+	transport "github.com/go-mosaic/runtime/transport"
+	factory "github.com/go-mosaic/runtime/transport/factory"
+)
+
+type UserServiceOptions struct {
+	transportOptions  []transport.TransportOption
+	middleware        []transport.Middleware
+	middlewareGetUser []transport.Middleware
+}
+
+func (o *UserServiceOptions) TransportOptions(opts ...transport.TransportOption) *UserServiceOptions {
+	o.transportOptions = append(o.transportOptions, opts...)
+	return o
+}
+
+func (o *UserServiceOptions) Middleware(middleware ...transport.Middleware) *UserServiceOptions {
+	o.middleware = append(o.middleware, middleware...)
+	return o
+}
+
+func (o *UserServiceOptions) MiddlewareGetUser(middleware ...transport.Middleware) *UserServiceOptions {
+	o.middlewareGetUser = append(o.middlewareGetUser, middleware...)
+	return o
+}
+
+func UserServiceRegisterHandlers(router v5.Router, svc fixtures.UserService, opt *UserServiceOptions) {
+	if opt == nil {
+		opt = &UserServiceOptions{}
+	}
+	transportFactory := factory.NewFactory(opt.transportOptions...)
+	tr, err := transportFactory.Create(factory.TransportTypeChi, router)
+	if err != nil {
+		panic(err)
+	}
+	tr.AddRoute("GET", "/user/{id}", func(req transport.Request, resp transport.Response) error {
+
+		var paramId int
+		if err := runtime.ParseHeaderParam(req.PathValue("id"), &paramId); err != nil {
+			return err
+		}
+
+		user, err := svc.GetUser(req.Context(), paramId)
+		if err != nil {
+			return err
+		}
+		var respData struct {
+			User *fixtures.User `json:"user"`
+		}
+		respData.User = user
+		resp.WriteData(req, respData)
+		return nil
+	}, append(opt.middleware, opt.middlewareGetUser...)...)
+}

@@ -1,0 +1,31 @@
+
+
+package middleware
+
+import (
+	"context"
+	fixtures "github.com/go-mosaic/gomosaic/v2/plugins/middleware/fixtures"
+	runtime "github.com/go-mosaic/runtime"
+	span "github.com/go-mosaic/runtime/span"
+)
+
+type MetricServiceMetricMiddleware struct {
+	next      fixtures.MetricService
+	collector span.MetricsCollector
+}
+
+func MetricMetricServiceMiddleware(collector span.MetricsCollector) runtime.Middleware[fixtures.MetricService] {
+	return func(next fixtures.MetricService) fixtures.MetricService {
+		return &MetricServiceMetricMiddleware{
+			collector: collector,
+			next:      next,
+		}
+	}
+}
+func (m *MetricServiceMetricMiddleware) GetUser(ctx context.Context, id int) (string, error) {
+	span := span.StartMetricSpan(m.collector, ctx)
+	user, err := m.next.GetUser(ctx, id)
+	// Завершение метрик-спана
+	span.Finish(ctx)
+	return user, err
+}
