@@ -52,7 +52,6 @@ func TypeInfoQual(typeInfo *gomosaic.TypeInfo, qual QualFunc) (s *jen.Statement)
 		if typeInfo.IsInstantiated {
 			s.IndexFunc(func(g *jen.Group) {
 				for _, typeParam := range typeInfo.TypeParams {
-
 					g.Add(TypeInfoQual(typeParam, qual))
 
 					// if typeParam.IsNamed {

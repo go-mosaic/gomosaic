@@ -44,6 +44,88 @@ go install github.com/go-mosaic/gomosaic/cmd/gomosaic@latest
 - Типизация: минимизация ошибок благодаря типизированным запросам и ответам.
 - Гибкость: возможность кастомизации и конфигураций.
 
-Лицензия: 
+## HTTP Binder — хелперы сборки параметров HTTP-запроса
 
-MIT
+Плагин генерирует метод `Bind(r *http.Request) error` для  извлечения параметров в структуру.
+
+### Аннотации структуры
+
+| Аннотация | Описание |
+|-----------|----------|
+| `@http-form-max-memory <байт>` | Максимальный размер multipart-формы (по умолчанию 32 MB) |
+
+### Аннотации полей
+
+| Аннотация | Описание | Значение по умолчанию |
+|-----------|----------|----------------------|
+| `@http-source query\|path\|header\|cookie\|form\|file` | Источник параметра | `query` |
+| `@http-name <имя>` | Имя HTTP-параметра (если отличается от имени поля) | Имя Go-поля |
+| `@http-default <значение>` | Значение по умолчанию | — |
+| `@http-required` | Параметр обязателен | — |
+
+### Источники параметров
+
+| Источник | Генерируемый код | Примечание |
+|----------|------------------|------------|
+| `query` | `r.URL.Query().Get("name")` | Query-строка URL |
+| `path` | `r.PathValue("name")` / `chi.URLParam(r, "name")` | Зависит от стратегии |
+| `header` | `r.Header.Get("name")` | Заголовки запроса |
+| `cookie` | `r.Cookie("name")` | Куки |
+| `form` | `r.FormValue("name")` | Поля формы (автоматически вызывает `ParseMultipartForm`) |
+| `file` | `r.FormFile("name")` | Загружаемые файлы (тип поля: `*multipart.FileHeader`) |
+
+### Стратегии
+
+Плагин поддерживает стратегии для разных HTTP-роутеров:
+
+```go
+// Стандартный роутер 
+stdPlugin := binder.NewPlugin(&binder.StdStrategy{})
+
+// Chi-роутер
+chiPlugin := binder.NewPlugin(&binder.ChiStrategy{})
+```
+
+### Пример
+
+**Описание структуры:**
+
+```go
+// @gomosaic
+type PostsRequest struct {
+    // @http-default all
+    Tag string
+
+    // @http-name limit_val
+    Limit int
+
+    // @http-source header
+    // @http-name X-Request-ID
+    RequestID string
+
+    // @http-source path
+    // @http-name id
+    // @http-required
+    PostID int
+
+    // @http-source form
+    // @http-name title
+    Title string
+
+    // @http-source file
+    // @http-name avatar
+    Avatar *multipart.FileHeader
+}
+```
+
+**Использование в хендлере:**
+
+```go
+func (h *Handler) handlePosts(w http.ResponseWriter, r *http.Request) {
+    var params PostsRequest
+    if err := params.Bind(r); err != nil {
+        http.Error(w, err.Error(), http.StatusBadRequest)
+        return
+    }
+}
+```

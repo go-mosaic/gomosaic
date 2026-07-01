@@ -12,7 +12,6 @@ require (
 	github.com/fatih/structtag v1.2.0
 	github.com/go-mosaic/runtime v1.0.2
 	github.com/hashicorp/go-multierror v1.1.1
-	github.com/jaswdr/faker/v2 v2.3.3
 	github.com/samber/lo v1.51.0
 	github.com/spf13/cobra v1.8.0
 	github.com/vmihailenco/tagparser/v2 v2.0.0
