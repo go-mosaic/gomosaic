@@ -1,4 +1,4 @@
-// Package plugin содержит документацию по созданию плагинов для gomosaic.
+// Package plugin документация по созданию плагинов для gomosaic.
 //
 // В gomosaic плагины регистрируются через PluginRegistry.
 //

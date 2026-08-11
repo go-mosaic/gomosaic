@@ -76,7 +76,6 @@ func (g *ClientGenerator) Generate(services []*annotation.IfaceOpt) (jen.Code, e
 		g.rewriteTypes = structGen.Processed()
 
 		for _, s := range clientServices {
-
 			group.Add(g.genClientStruct(s))
 			group.Add(g.genClientConstruct(s))
 			group.Add(g.genClientEndpoints(s))
@@ -193,7 +192,6 @@ func (g *ClientGenerator) genQueryParamsForNamed(fldName string, fields []*gomos
 							).Parse(),
 					)
 				})
-
 			} else {
 				valueID := jen.Id("r").Dot("params").Dot(fldName).Dot(f.Name)
 
@@ -212,7 +210,7 @@ func (g *ClientGenerator) genQueryParamsForNamed(fldName string, fields []*gomos
 	return group
 }
 
-func (g *ClientGenerator) genQueryParamsForField(fldName string, p *annotation.MethodParamOpt) jen.Code {
+func (g *ClientGenerator) genQueryParamsForField(p *annotation.MethodParamOpt) jen.Code {
 	group := jen.NewFile("")
 
 	paramID := jen.Id(recvName).Dot("params").Dot(p.Var.Name)
@@ -254,7 +252,7 @@ func (g *ClientGenerator) genQueryParams(methodOpt *annotation.MethodOpt) jen.Co
 		if p.Var.Type.IsNamed && p.Var.Type.ElemType.Struct != nil {
 			blockCode = g.genQueryParamsForNamed(fldName, p.Var.Type.ElemType.Struct.Fields)
 		} else {
-			blockCode = g.genQueryParamsForField(fldName, p)
+			blockCode = g.genQueryParamsForField(p)
 		}
 
 		if !p.Required {

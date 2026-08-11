@@ -1,9 +1,9 @@
-// Package option предоставляет парсер опций из аннотаций.
 package option
 
 import (
 	"fmt"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -11,9 +11,9 @@ import (
 )
 
 // Unmarshal заполняет структуру opts значениями из аннотаций с префиксом prefix.
-func Unmarshal(prefix string, annotations gomosaic.Annotations, opts interface{}) error {
+func Unmarshal(prefix string, annotations gomosaic.Annotations, opts any) error {
 	v := reflect.ValueOf(opts)
-	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("opts должен быть указателем на структуру")
 	}
 	v = v.Elem()
@@ -24,7 +24,10 @@ func Unmarshal(prefix string, annotations gomosaic.Annotations, opts interface{}
 			continue
 		}
 		optionName := strings.TrimPrefix(ann.Key, prefix+"-")
-		unmarshalStruct(v, t, ann, optionName)
+
+		if err := unmarshalStruct(v, t, ann, optionName); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -42,7 +45,7 @@ func unmarshalStruct(v reflect.Value, t reflect.Type, ann *gomosaic.AnnotationIn
 		// Для inline-полей — обрабатываем аннотацию на вложенной структуре
 		if tp.inline && tp.name == "" {
 			fv := v.Field(i)
-			if fv.Kind() == reflect.Ptr {
+			if fv.Kind() == reflect.Pointer {
 				if fv.IsNil() {
 					fv.Set(reflect.New(fv.Type().Elem()))
 				}
@@ -56,16 +59,70 @@ func unmarshalStruct(v reflect.Value, t reflect.Type, ann *gomosaic.AnnotationIn
 			continue
 		}
 
+		// Вложенные структуры через дефис: @http-single-req -> Single.Req.
 		if tp.name != optionName {
+			if field.Type.Kind() == reflect.Struct && strings.HasPrefix(optionName, tp.name+"-") {
+				remaining := strings.TrimPrefix(optionName, tp.name+"-")
+
+				if err := unmarshalStruct(v.Field(i), field.Type, ann, remaining); err != nil {
+					return fmt.Errorf("поле %s.%s: %w", t.Name(), field.Name, err)
+				}
+			}
+
 			continue
 		}
 
 		fv := v.Field(i)
+
+		// Вложенная структура из одной аннотации:
+		// @http-single req, @http-default content-type=application/json.
+		if field.Type.Kind() == reflect.Struct && !tp.inline {
+			applyNestedAnnotation(fv, field.Type, ann)
+
+			continue
+		}
+
 		if err := setFieldValue(fv, ann, tp); err != nil {
 			return fmt.Errorf("поле %s.%s: %w", t.Name(), field.Name, err)
 		}
 	}
 	return nil
+}
+
+// applyNestedAnnotation заполняет вложенную структуру из одной аннотации:
+// флаги берутся из позиционных параметров (@http-single req),
+// строковые значения - из именованных (@http-default content-type=application/json).
+func applyNestedAnnotation(v reflect.Value, t reflect.Type, ann *gomosaic.AnnotationInfo) {
+	for i := 0; i < t.NumField(); i++ {
+		field := t.Field(i)
+
+		tag := field.Tag.Get("option")
+		if tag == "" {
+			continue
+		}
+
+		tp := parseTag(tag)
+		if tp.name == "" {
+			continue
+		}
+
+		fv := v.Field(i)
+		if !fv.CanSet() {
+			continue
+		}
+
+		// обрабатываем только bool и string
+		switch fv.Kind() { //nolint:exhaustive
+		case reflect.Bool:
+			if slices.Contains(ann.Params, tp.name) {
+				fv.SetBool(true)
+			}
+		case reflect.String:
+			if val, ok := ann.NamedParams[tp.name]; ok {
+				fv.SetString(val)
+			}
+		}
+	}
 }
 
 type tagParts struct {
@@ -105,7 +162,6 @@ func setFieldValue(field reflect.Value, ann *gomosaic.AnnotationInfo, tp tagPart
 	}
 
 	if tp.fromParam {
-		// Читаем из именованных параметров аннотации
 		return setFieldFromParams(field, ann)
 	}
 
@@ -141,24 +197,19 @@ func setFieldValue(field reflect.Value, ann *gomosaic.AnnotationInfo, tp tagPart
 	case reflect.Slice:
 		if field.Type().Elem().Kind() == reflect.String {
 			if tp.fromOption {
-				// Для fromOption собираем значения из аннотаций
 				vals := make([]string, 0)
-				for _, p := range ann.Params {
-					vals = append(vals, p)
-				}
+				vals = append(vals, ann.Params...)
 				field.Set(reflect.ValueOf(vals))
 			} else {
 				field.Set(reflect.ValueOf(ann.Params))
 			}
 		}
-	case reflect.Ptr:
-		// Для указателей создаём экземпляр и заполняем
+	case reflect.Pointer:
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))
 		}
 		return setFieldValue(field.Elem(), ann, tp)
 	case reflect.Struct:
-		// Для вложенных структур
 		if tp.inline {
 			return unmarshalStruct(field, field.Type(), ann, "")
 		}
@@ -170,7 +221,6 @@ func setFieldFromParams(field reflect.Value, ann *gomosaic.AnnotationInfo) error
 	if field.Kind() != reflect.String {
 		return nil
 	}
-	// Для строковых полей ищем первый именованный параметр
 	for _, val := range ann.NamedParams {
 		field.SetString(val)
 		return nil

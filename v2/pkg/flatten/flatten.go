@@ -25,7 +25,6 @@ func (p Paths) String() string {
 	return path.String()
 }
 
-// FlattenPath представляет путь к полю.
 type FlattenPath struct {
 	Var      *gomosaic.VarInfo
 	Path     *jen.Statement
@@ -34,7 +33,6 @@ type FlattenPath struct {
 	IsArray  bool
 }
 
-// PathName имя поля и его JSON-имя.
 type PathName struct {
 	Name     string
 	JSONName string
@@ -45,7 +43,6 @@ func (n PathName) Value() string {
 	return n.Name
 }
 
-// JSON возвращает JSON-имя поля.
 func (n PathName) JSON() string {
 	if n.JSONName == "" {
 		return n.Name
@@ -54,7 +51,6 @@ func (n PathName) JSON() string {
 	return n.JSONName
 }
 
-// FlattenProcessor обрабатывает уплощение структуры.
 type FlattenProcessor struct {
 	allPaths    []FlattenPath
 	currentPath []PathName

@@ -51,6 +51,10 @@ type MethodOpt struct {
 	Use           UseOpt        `option:"use"`
 	Default       DefaultOpt    `option:"default"`
 
+	// ClientSkip исключает метод из генерации HTTP-клиента (http-client,
+	// http-client-test).
+	ClientSkip bool `option:"client-skip,asFlag"`
+
 	// Вычисляемые поля
 	Iface         *IfaceOpt
 	Func          *gomosaic.MethodInfo
@@ -68,19 +72,19 @@ type MethodOpt struct {
 	CookieResults []*MethodResultOpt
 }
 
-// MethodWrapOpt — опции оборачивания.
+// MethodWrapOpt опции оборачивания.
 type MethodWrapOpt struct {
 	Path      string   `option:"path"`
 	PathParts []string // вычисляется из Path
 }
 
-// SingleOpt — опции одиночного параметра.
+// SingleOpt опции одиночного параметра.
 type SingleOpt struct {
 	Req  bool `option:"req,asFlag"`
 	Resp bool `option:"resp,asFlag"`
 }
 
-// UseOpt — опции использования.
+// UseOpt опции использования.
 type UseOpt struct {
 	Multipart  bool `option:"multipart"`
 	URLEncoded bool `option:"url-encoded"`
@@ -98,7 +102,7 @@ type MethodParamOpt struct {
 	PathParamName  string
 }
 
-// MethodParamNameOpt — опции имени параметра.
+// MethodParamNameOpt опции имени параметра.
 type MethodParamNameOpt struct {
 	Value     string `option:",fromValue"`
 	Omitempty bool   `option:",fromOption,asFlag"`

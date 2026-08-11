@@ -9,18 +9,52 @@ import (
 )
 
 func TestOpenAPIPlugin_Golden(t *testing.T) {
-	module, types := golden.ParseAndGenerate(t, ".", "fixtures/service.go")
-
-	plugin := NewPlugin()
-	ctx := gomosaic.ContextWithOutputDir(context.Background(), module.Dir+"/internal/docs")
-
-	files, err := plugin.Generate(ctx, module, types)
-	if err != nil {
-		t.Fatalf("Generate() error = %v", err)
+	tests := []struct {
+		name       string
+		fixture    string
+		outputDir  string
+		goldenName string
+	}{
+		{
+			name:       "service",
+			fixture:    "fixtures/service.go",
+			outputDir:  "/internal/docs",
+			goldenName: "openapi",
+		},
 	}
-	if files == nil || len(files) == 0 {
-		t.Fatal("пустой результат генерации")
-	}
 
-	golden.AssertFile(t, files["openapi_gen.go"].(*gomosaic.GoFile), "openapi")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			module, types := golden.ParseAndGenerate(t, ".", tt.fixture)
+
+			plugin := NewPlugin()
+
+			pluginReg := gomosaic.NewPluginRegistry()
+			pluginReg.MustRegister(plugin)
+
+			fs := gomosaic.NewMemoryFileSystem("test")
+
+			cg := gomosaic.NewCodeGenerator(pluginReg, gomosaic.DefaultTransformRegistry(), fs)
+
+			ctx := gomosaic.ContextWithOutputDir(context.Background(), module.Dir+tt.outputDir)
+
+			outputFiles, err := cg.Generate(ctx, module, types, plugin.Name())
+			if err != nil {
+				t.Fatalf("Generate() error = %v", err)
+			}
+
+			if len(outputFiles) == 0 {
+				t.Fatal("пустой результат генерации")
+			}
+
+			filename := "openapi_gen.go"
+
+			fileContent, ok := fs.File(filename)
+			if !ok {
+				t.Fatalf("файл %s не найден в сгенерированных: %v", filename, outputFiles)
+			}
+
+			golden.AssertBytes(t, fileContent, tt.goldenName)
+		})
+	}
 }

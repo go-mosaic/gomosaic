@@ -19,6 +19,8 @@ type SearchParams struct {
 	Offset int
 }
 
+// UserService интерфейс сервиса пользователей
+// @gomosaic
 // @http-default accept=application/json
 // @http-default content-type=application/json
 // @http-client-enable
@@ -74,4 +76,11 @@ type UserService interface {
 		// @http-name X-Offset
 		offset int,
 	) (users []User, total int, err error)
+
+	// @http-method GET
+	// @http-path /users/search
+	FilterUsers(ctx context.Context,
+		// @http-type query
+		params SearchParams,
+	) (users []User, err error)
 }

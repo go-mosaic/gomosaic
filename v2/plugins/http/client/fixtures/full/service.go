@@ -13,9 +13,12 @@ type CreateUserRequest struct {
 	Age   int
 }
 
+// UserService интерфейс сервиса пользователей.
+// @gomosaic
 // @http-default accept=application/json
 // @http-default content-type=application/json
 // @http-client-enable
+// @http-copy-types
 type UserService interface {
 	// @http-method GET
 	// @http-path /users
@@ -23,6 +26,7 @@ type UserService interface {
 
 	// @http-method GET
 	// @http-path /user/{id}
+	// @http-single resp
 	GetUser(ctx context.Context,
 		// @http-type path
 		// @http-required
@@ -66,4 +70,12 @@ type UserService interface {
 		// @http-name X-Offset
 		offset int,
 	) (users []User, total int, err error)
+
+	// @http-method POST
+	// @http-path /internal/notify
+	// @http-client-skip
+	InternalNotify(ctx context.Context,
+		// @http-type body
+		payload *CreateUserRequest,
+	) (err error)
 }

@@ -1,8 +1,5 @@
 // Package pipeline предоставляет расширенные возможности пайплайна генерации:
 // контекст генерации, промежуточные обработчики (middleware) и этапы обработки.
-//
-// Пайплайн позволяет разделить процесс генерации на этапы и добавить
-// pre/post-обработчики, логирование, валидацию и другие сквозные задачи.
 package pipeline
 
 import (
@@ -20,11 +17,11 @@ type Stage interface {
 type StageData struct {
 	Module *gomosaic.ModuleInfo
 	Types  []*gomosaic.NameTypeInfo
-	// Annotations — результат этапа загрузки аннотаций.
+	// Annotations результат этапа загрузки аннотаций.
 	Annotations any
-	// Files — результат этапа генерации кода.
+	// Files результат этапа генерации кода.
 	Files map[string]gomosaic.File
-	// Metadata позволяет передавать произвольные данные между этапами.
+	// Metadata произвольные данные между этапами.
 	Metadata map[string]any
 }
 
@@ -48,7 +45,6 @@ func (p *Pipeline) AddStage(stage Stage) {
 	p.stages = append(p.stages, stage)
 }
 
-// Run выполняет все этапы пайплайна последовательно.
 func (p *Pipeline) Run(ctx context.Context, data *StageData) (*StageData, error) {
 	var err error
 
@@ -63,8 +59,6 @@ func (p *Pipeline) Run(ctx context.Context, data *StageData) (*StageData, error)
 	return data, nil
 }
 
-// PluginAdapter адаптирует плагин для использования в пайплайне.
-// Позволяет обернуть существующий Generator в этап пайплайна.
 type PluginAdapter struct {
 	name   string
 	plugin gomosaic.Generator

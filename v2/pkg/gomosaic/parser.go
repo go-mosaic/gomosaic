@@ -5,7 +5,6 @@ import (
 	"go/constant"
 	"go/token"
 	"go/types"
-	"path/filepath"
 	"strings"
 
 	"github.com/fatih/structtag"
@@ -14,8 +13,6 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/annotation"
 )
 
-// ParsePackage парсит указанные пакеты и возвращает информацию о типах.
-// Портирован из v1: использует go/types для полного резолвинга типов.
 func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, err error) {
 	patterns := make([]string, len(paths))
 	for i := range paths {
@@ -39,6 +36,7 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 
 		returnValues := parseReturnValues(pkg, pkg.Syntax)
 		scope := pkg.Types.Scope()
+		visited := make(map[*types.Named]bool)
 
 		for _, name := range scope.Names() {
 			obj := scope.Lookup(name)
@@ -56,7 +54,11 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 				return nil, err
 			}
 
-			typeInfo, err := typeToTypeInfo(pkg, obj.Type().Underlying())
+			if !annotations.Has("gomosaic") {
+				continue
+			}
+
+			typeInfo, err := typeToTypeInfoVisited(pkg, obj.Type().Underlying(), visited)
 			if err != nil {
 				return nil, err
 			}
@@ -71,13 +73,12 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 				Type:        typeInfo,
 			}
 
-			for i := range named.NumMethods() {
-				method := named.Method(i)
+			for method := range named.Methods() {
 				if !method.Exported() {
 					continue
 				}
 
-				methodInfo, err := funcToMethodInfo(pkg, method)
+				methodInfo, err := funcToMethodInfoVisited(pkg, method, visited)
 				if err != nil {
 					return nil, err
 				}
@@ -96,19 +97,14 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 	return nameTypesInfo, nil
 }
 
-// ParseDir парсит Go-файлы в директории напрямую (без go/packages, fallback).
-func ParseDir(dir string) ([]*NameTypeInfo, error) {
-	return ParsePackage(dir, []string{dir})
-}
-
-// varToVarInfo преобразует types.Var в VarInfo.
-func varToVarInfo(pkg *packages.Package, v *types.Var) (*VarInfo, error) {
+// varToVarInfoVisited преобразует types.Var в VarInfo с отслеживанием посещённых типов.
+func varToVarInfoVisited(pkg *packages.Package, v *types.Var, visited map[*types.Named]bool) (*VarInfo, error) {
 	title, doc, annotations, err := findDocAndAnnotations(pkg, v.Name(), v.Pos())
 	if err != nil {
 		return nil, err
 	}
 
-	typeInfo, err := typeToTypeInfo(pkg, v.Type())
+	typeInfo, err := typeToTypeInfoVisited(pkg, v.Type(), visited)
 	if err != nil {
 		return nil, err
 	}
@@ -131,12 +127,17 @@ func varToVarInfo(pkg *packages.Package, v *types.Var) (*VarInfo, error) {
 	}, nil
 }
 
-// funcToMethodInfo преобразует types.Func в MethodInfo.
-func funcToMethodInfo(pkg *packages.Package, method *types.Func) (*MethodInfo, error) {
+// funcToMethodInfoVisited преобразует types.Func в MethodInfo с отслеживанием посещённых типов.
+func funcToMethodInfoVisited(
+	pkg *packages.Package,
+	method *types.Func,
+	visited map[*types.Named]bool,
+) (*MethodInfo, error) {
 	title, doc, annotations, err := findDocAndAnnotations(pkg, method.Name(), method.Pos())
 	if err != nil {
 		return nil, err
 	}
+
 	methodInfo := &MethodInfo{
 		Name:        method.Name(),
 		FullName:    method.FullName(),
@@ -150,61 +151,68 @@ func funcToMethodInfo(pkg *packages.Package, method *types.Func) (*MethodInfo, e
 
 	if sig := method.Signature(); sig != nil {
 		methodInfo.ShortName = method.Name()
+
 		if recv := sig.Recv(); recv != nil {
 			if named, ok := recv.Type().(*types.Named); ok {
 				name := named.Obj().Name()
 				if named.Obj().Pkg() != nil {
 					name = named.Obj().Pkg().Name() + "." + name
 				}
+
 				methodInfo.ShortName = "(" + name + ")." + method.Name()
 			}
 		}
 
-		paramVarsInfo, err := tuplesToVarsInfo(pkg, sig.Params())
+		paramVarsInfo, err := tuplesToVarsInfoVisited(pkg, sig.Params(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		methodInfo.Params = paramVarsInfo
 
-		resultVarsInfo, err := tuplesToVarsInfo(pkg, sig.Results())
+		resultVarsInfo, err := tuplesToVarsInfoVisited(pkg, sig.Results(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		methodInfo.Results = resultVarsInfo
 	}
 
 	return methodInfo, nil
 }
 
-// tuplesToVarsInfo преобразует types.Tuple в []VarInfo.
-func tuplesToVarsInfo(pkg *packages.Package, tuple *types.Tuple) (varsInfo []*VarInfo, err error) {
+// tuplesToVarsInfoVisited преобразует types.Tuple в []VarInfo с отслеживанием посещённых типов.
+func tuplesToVarsInfoVisited(pkg *packages.Package, tuple *types.Tuple, visited map[*types.Named]bool) (varsInfo []*VarInfo, err error) {
 	if tuple == nil {
 		return nil, nil
 	}
-	for i := range tuple.Len() {
-		v := tuple.At(i)
-		varInfo, err := varToVarInfo(pkg, v)
+
+	for v := range tuple.Variables() {
+		varInfo, err := varToVarInfoVisited(pkg, v, visited)
 		if err != nil {
 			return nil, err
 		}
+
 		varsInfo = append(varsInfo, varInfo)
 	}
+
 	return varsInfo, nil
 }
 
-// packageToPackageInfo преобразует types.Package в PackageInfo.
 func packageToPackageInfo(pkg *types.Package) *PackageInfo {
 	if pkg == nil {
 		return &PackageInfo{}
 	}
+
 	return &PackageInfo{
 		Name: pkg.Name(),
 		Path: pkg.Path(),
 	}
 }
 
-// typeToTypeInfo преобразует types.Type в TypeInfo (полный резолвинг).
-func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
+// typeToTypeInfoVisited преобразует types.Type в TypeInfo с отслеживанием посещённых *types.Named типов
+// для предотвращения бесконечной рекурсии при циклических ссылках.
+func typeToTypeInfoVisited(pkg *packages.Package, t types.Type, visited map[*types.Named]bool) (*TypeInfo, error) {
 	typeInfo := &TypeInfo{}
 
 	switch t := t.(type) {
@@ -232,53 +240,67 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 	case *types.Chan:
 		typeInfo.Name = "chan"
 		typeInfo.IsChan = true
+
 		if t.Dir() == types.SendOnly {
 			typeInfo.Name += "<-"
 		} else {
 			typeInfo.Name = "<-" + typeInfo.Name
 		}
-		elemType, err := typeToTypeInfo(pkg, t.Elem())
+
+		elemType, err := typeToTypeInfoVisited(pkg, t.Elem(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.ElemType = elemType
 	case *types.Pointer:
 		typeInfo.IsPtr = true
-		elemType, err := typeToTypeInfo(pkg, t.Elem())
+
+		elemType, err := typeToTypeInfoVisited(pkg, t.Elem(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.ElemType = elemType
 	case *types.Slice:
 		typeInfo.IsSlice = true
-		elemType, err := typeToTypeInfo(pkg, t.Elem())
+
+		elemType, err := typeToTypeInfoVisited(pkg, t.Elem(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.ElemType = elemType
 	case *types.Array:
 		typeInfo.IsArray = true
 		typeInfo.ArrayLen = int(t.Len())
-		elemType, err := typeToTypeInfo(pkg, t.Elem())
+
+		elemType, err := typeToTypeInfoVisited(pkg, t.Elem(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.ElemType = elemType
 	case *types.Map:
 		typeInfo.IsMap = true
-		keyType, err := typeToTypeInfo(pkg, t.Key())
+
+		keyType, err := typeToTypeInfoVisited(pkg, t.Key(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.KeyType = keyType
-		elemType, err := typeToTypeInfo(pkg, t.Elem())
+
+		elemType, err := typeToTypeInfoVisited(pkg, t.Elem(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.ElemType = elemType
 	case *types.Named:
 		typeInfo.IsNamed = true
 		typeInfo.Name = t.Obj().Name()
+
 		if pkg := t.Obj().Pkg(); pkg != nil {
 			typeInfo.Package = pkg.Path()
 		}
@@ -286,22 +308,33 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		if t.TypeArgs() != nil {
 			typeInfo.IsInstantiated = true
 			typeArgs := make([]*TypeInfo, 0, t.TypeArgs().Len())
-			for i := 0; i < t.TypeArgs().Len(); i++ {
-				typeArg := t.TypeArgs().At(i)
-				argInfo, err := typeToTypeInfo(pkg, typeArg)
+
+			for typeArg := range t.TypeArgs().Types() {
+				argInfo, err := typeToTypeInfoVisited(pkg, typeArg, visited)
 				if err != nil {
 					return nil, err
 				}
+
 				typeArgs = append(typeArgs, argInfo)
 			}
+
 			typeInfo.TypeParams = typeArgs
 		}
 
 		if t.Obj().Type() != nil {
-			named, err := typeToTypeInfo(pkg, t.Obj().Type().Underlying())
+			if visited != nil && visited[t] {
+				// Уже посещали этот тип — пропускаем для предотвращения цикла
+				break
+			}
+			if visited != nil {
+				visited[t] = true
+			}
+
+			named, err := typeToTypeInfoVisited(pkg, t.Obj().Type().Underlying(), visited)
 			if err != nil {
 				return nil, err
 			}
+
 			typeInfo.ElemType = named
 		}
 	case *types.Struct:
@@ -309,58 +342,75 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		structInfo := &StructInfo{
 			Fields: make([]*VarInfo, 0, 64),
 		}
+
 		for i := range t.NumFields() {
 			field := t.Field(i)
 			if !field.Exported() {
 				continue
 			}
-			varInfo, err := varToVarInfo(pkg, field)
+
+			varInfo, err := varToVarInfoVisited(pkg, field, visited)
 			if err != nil {
 				return nil, err
 			}
+
 			if tags, err := structtag.Parse(t.Tag(i)); err == nil {
 				varInfo.Tags = tags
 			}
+
 			structInfo.Fields = append(structInfo.Fields, varInfo)
 		}
+
 		typeInfo.Struct = structInfo
 	case *types.Interface:
 		typeInfo.Name = "interface"
 		interfaceInfo := &InterfaceInfo{}
-		for i := range t.NumMethods() {
-			method := t.Method(i)
+
+		for method := range t.Methods() {
 			if !method.Exported() {
 				continue
 			}
-			methodInfo, err := funcToMethodInfo(pkg, method)
+
+			// Для каждого метода создаём отдельную карту посещённых типов,
+			// чтобы типы из одного метода не влияли на резолвинг в другом.
+			methodVisited := make(map[*types.Named]bool)
+
+			methodInfo, err := funcToMethodInfoVisited(pkg, method, methodVisited)
 			if err != nil {
 				return nil, err
 			}
+
 			interfaceInfo.Methods = append(interfaceInfo.Methods, methodInfo)
 		}
+
 		typeInfo.Interface = interfaceInfo
 	case *types.Signature:
 		typeInfo.Name = "func"
 		var typeParams []*TypeInfo
+
 		if t.TypeParams() != nil {
 			typeParams = make([]*TypeInfo, 0, t.TypeParams().Len())
-			for i := 0; i < t.TypeParams().Len(); i++ {
-				typeParam := t.TypeParams().At(i)
-				paramInfo, err := typeToTypeInfo(pkg, typeParam)
+
+			for typeParam := range t.TypeParams().TypeParams() {
+				paramInfo, err := typeToTypeInfoVisited(pkg, typeParam, visited)
 				if err != nil {
 					return nil, err
 				}
+
 				typeParams = append(typeParams, paramInfo)
 			}
 		}
-		paramVarsInfo, err := tuplesToVarsInfo(pkg, t.Params())
+
+		paramVarsInfo, err := tuplesToVarsInfoVisited(pkg, t.Params(), visited)
 		if err != nil {
 			return nil, err
 		}
-		resultVarsInfo, err := tuplesToVarsInfo(pkg, t.Results())
+
+		resultVarsInfo, err := tuplesToVarsInfoVisited(pkg, t.Results(), visited)
 		if err != nil {
 			return nil, err
 		}
+
 		typeInfo.Signature = &SignatureInfo{
 			Params:     paramVarsInfo,
 			Results:    resultVarsInfo,
@@ -369,32 +419,35 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 	case *types.TypeParam:
 		typeInfo.IsTypeParam = true
 		typeInfo.Name = t.Obj().Name()
+
 		if constraint := t.Constraint(); constraint != nil {
-			constraintInfo, err := typeToTypeInfo(pkg, constraint)
+			constraintInfo, err := typeToTypeInfoVisited(pkg, constraint, visited)
 			if err != nil {
 				return nil, err
 			}
+
 			typeInfo.ElemType = constraintInfo
 		}
 	case *types.Union:
 		typeInfo.IsUnion = true
 		typeInfo.Name = "union"
+
 		terms := make([]*TypeInfo, 0, t.Len())
-		for i := 0; i < t.Len(); i++ {
-			term := t.Term(i)
-			termInfo, err := typeToTypeInfo(pkg, term.Type())
+		for term := range t.Terms() {
+			termInfo, err := typeToTypeInfoVisited(pkg, term.Type(), visited)
 			if err != nil {
 				return nil, err
 			}
+
 			terms = append(terms, termInfo)
 		}
+
 		typeInfo.UnionTerms = terms
 	}
 
 	return typeInfo, nil
 }
 
-// parseReturnValues ищет возвращаемые значения базового типа в функциях.
 func parseReturnValues(pkg *packages.Package, files []*ast.File) map[string][]*TypeAndValueInfo {
 	returnValues := make(map[string][]*TypeAndValueInfo, 128)
 
@@ -404,14 +457,17 @@ func parseReturnValues(pkg *packages.Package, files []*ast.File) map[string][]*T
 			if !ok {
 				return true
 			}
+
 			obj := pkg.TypesInfo.ObjectOf(fnDecl.Name)
 			if obj == nil {
 				return true
 			}
+
 			fn, ok := obj.(*types.Func)
 			if !ok || !fn.Exported() {
 				return true
 			}
+
 			key := fn.FullName()
 
 			ast.Inspect(fnDecl.Body, func(n ast.Node) bool {
@@ -419,7 +475,9 @@ func parseReturnValues(pkg *packages.Package, files []*ast.File) map[string][]*T
 				if !ok {
 					return true
 				}
+
 				typeAndValues := make([]*TypeAndValueInfo, 0, len(ret.Results))
+
 				for _, result := range ret.Results {
 					if tv, ok := pkg.TypesInfo.Types[result]; ok && tv.Value != nil {
 						typeAndValues = append(typeAndValues, &TypeAndValueInfo{
@@ -428,19 +486,23 @@ func parseReturnValues(pkg *packages.Package, files []*ast.File) map[string][]*T
 						})
 					}
 				}
+
 				returnValues[key] = typeAndValues
+
 				return true
 			})
+
 			return true
 		})
 	}
+
 	return returnValues
 }
 
-// findDocAndAnnotations находит аннотации, заголовок и описание для элемента.
 func findDocAndAnnotations(pkg *packages.Package, name string, pos token.Pos) (title, description string, annotations Annotations, err error) {
 	var annotationComments []*CommentInfo
 	allComments := findComments(pkg, name, pos)
+
 	for _, comment := range allComments {
 		switch {
 		default:
@@ -451,16 +513,17 @@ func findDocAndAnnotations(pkg *packages.Package, name string, pos token.Pos) (t
 			title = comment.Value
 		}
 	}
+
 	if len(annotationComments) > 0 {
 		annotations, err = ParseAnnotations(annotationComments)
 		if err != nil {
 			return
 		}
 	}
+
 	return
 }
 
-// findComments находит комментарии для элемента по позиции в AST.
 func findComments(pkg *packages.Package, name string, pos token.Pos) (commentsInfo []*CommentInfo) {
 	position := pkg.Fset.Position(pos)
 
@@ -470,11 +533,13 @@ func findComments(pkg *packages.Package, name string, pos token.Pos) (commentsIn
 			if cg.Line == position.Line-1 && cg.Filename == position.Filename {
 				for _, comment := range commentGroup.List {
 					text := strings.TrimLeft(strings.TrimLeft(comment.Text, "/"), " ")
-					isTitle := strings.HasPrefix(text, name)
 					isAnnotation := strings.HasPrefix(text, "@")
+
+					isTitle := strings.HasPrefix(text, name)
 					if isTitle {
 						text = strings.ReplaceAll(text, name+" ", "")
 					}
+
 					commentsInfo = append(commentsInfo, &CommentInfo{
 						Value:        text,
 						IsTitle:      isTitle,
@@ -485,6 +550,7 @@ func findComments(pkg *packages.Package, name string, pos token.Pos) (commentsIn
 			}
 		}
 	}
+
 	return commentsInfo
 }
 
@@ -522,25 +588,25 @@ func isError(typeInfo *TypeInfo) bool {
 	return typeInfo.Name == "error" && typeInfo.Package == ""
 }
 
-// ParseAnnotations парсит аннотации из комментариев.
 func ParseAnnotations(comments []*CommentInfo) (annotations Annotations, err error) {
 	for _, comment := range comments {
 		if !comment.IsAnnotation {
 			continue
 		}
+
 		s := strings.TrimSpace(comment.Value)
+
 		a, err := annotation.Parse(s)
 		if err != nil {
 			continue
 		}
+
 		posInfo := parsePosition(comment.Position)
 		annotations = append(annotations, &AnnotationInfo{
 			Annotation: a,
 			Position:   posInfo,
 		})
 	}
+
 	return annotations, nil
 }
-
-// filepath import needed
-var _ = filepath.Base

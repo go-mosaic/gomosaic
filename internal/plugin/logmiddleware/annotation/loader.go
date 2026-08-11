@@ -1,3 +1,4 @@
+// Package annotation предоставляет функциональность для работы с аннотациями.
 package annotation
 
 import (

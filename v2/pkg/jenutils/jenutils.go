@@ -1,3 +1,4 @@
+// Package jenutils предоставляет утилиты для работы с библиотекой jennifer (https://github.com/dave/jennifer).
 package jenutils
 
 import (

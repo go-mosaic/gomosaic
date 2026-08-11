@@ -3,15 +3,18 @@ package service
 import "context"
 
 type User struct {
+	ID    int64
 	Name  string
 	Email string
 }
 
 type CreateUserRequest struct {
+	ID    int64
 	Name  string
 	Email string
 }
 
+// @gomosaic
 type UserService interface {
 	// @http-method GET
 	// @http-path /users

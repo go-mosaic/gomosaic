@@ -118,8 +118,8 @@ func loadValidationRules(types []*gomosaic.NameTypeInfo) []*StructRules {
 
 func parseRule(s string) Rule {
 	r := Rule{}
-	parts := strings.Fields(s)
-	for _, p := range parts {
+	parts := strings.FieldsSeq(s)
+	for p := range parts {
 		switch {
 		case p == "required":
 			r.Required = true

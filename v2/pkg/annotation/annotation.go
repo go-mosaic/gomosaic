@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
 )
 
 type Annotation struct {
@@ -13,14 +14,14 @@ type Annotation struct {
 	NamedParams map[string]string
 }
 
-// Parse парсит строку аннотации вида "@key param1 param2".
+// Parse парсит строку аннотации.
 func Parse(s string) (*Annotation, error) {
 	s = strings.TrimSpace(s)
 	if !strings.HasPrefix(s, "@") {
 		return nil, fmt.Errorf("аннотация должна начинаться с @")
 	}
 
-	parts := strings.Fields(s)
+	parts := splitAnnotation(s)
 	if len(parts) == 0 {
 		return nil, fmt.Errorf("пустая аннотация")
 	}
@@ -31,24 +32,77 @@ func Parse(s string) (*Annotation, error) {
 		NamedParams: make(map[string]string),
 	}
 
-	for _, p := range parts[1:] {
-		if strings.Contains(p, "=") {
-			kv := strings.SplitN(p, "=", 2)
-			ann.NamedParams[kv[0]] = kv[1]
+	for i := 1; i < len(parts); i++ {
+		part := parts[i]
+		if strings.Contains(part, "=") {
+			kv := strings.SplitN(part, "=", 2)
+			ann.NamedParams[kv[0]] = unquote(kv[1])
 		} else {
-			ann.Params = append(ann.Params, p)
+			ann.Params = append(ann.Params, unquote(part))
 		}
 	}
 
 	return ann, nil
 }
 
-// HasParam проверяет наличие позиционного параметра.
+// unquote удаляет обрамляющие кавычки из строки.
+func unquote(value string) string {
+	if len(value) >= 2 && (value[0] == '"' || value[0] == '\'') && value[0] == value[len(value)-1] {
+		value = value[1 : len(value)-1]
+	}
+
+	return value
+}
+
+// splitAnnotation разбивает строку аннотации на части, учитывая кавычки и экранирование.
+func splitAnnotation(s string) []string {
+	var parts []string
+	var buffer []rune
+	var inQuotes rune
+	escape := false
+
+	for _, r := range s {
+		if escape {
+			buffer = append(buffer, r)
+			escape = false
+			continue
+		}
+
+		if r == '\\' {
+			escape = true
+			continue
+		}
+
+		if r == '"' || r == '\'' {
+			switch inQuotes {
+			case 0:
+				inQuotes = r
+			case r:
+				inQuotes = 0
+			}
+		}
+
+		if unicode.IsSpace(r) && inQuotes == 0 {
+			if len(buffer) > 0 {
+				parts = append(parts, string(buffer))
+				buffer = nil
+			}
+		} else {
+			buffer = append(buffer, r)
+		}
+	}
+
+	if len(buffer) > 0 {
+		parts = append(parts, string(buffer))
+	}
+
+	return parts
+}
+
 func (a *Annotation) HasParam(param string) bool {
 	return slices.Contains(a.Params, param)
 }
 
-// GetNamed возвращает именованный параметр.
 func (a *Annotation) GetNamed(name string) (string, bool) {
 	v, ok := a.NamedParams[name]
 	return v, ok

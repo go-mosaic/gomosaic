@@ -9,35 +9,73 @@ import (
 )
 
 func TestHTTPServerPlugin_Golden(t *testing.T) {
-	module, types := golden.ParseAndGenerate(t, ".", "fixtures/service.go")
-
-	plugin := NewPlugin(&ChiStrategy{})
-	ctx := gomosaic.ContextWithOutputDir(context.Background(), module.Dir+"/internal/controller")
-
-	files, err := plugin.Generate(ctx, module, types)
-	if err != nil {
-		t.Fatalf("Generate() error = %v", err)
+	tests := []struct {
+		name       string
+		fixture    string
+		strategy   Strategy
+		filename   string
+		goldenName string
+	}{
+		{
+			name:       "chi/basic",
+			fixture:    "fixtures/basic/service.go",
+			strategy:   &ChiStrategy{},
+			filename:   "server_chi_gen.go",
+			goldenName: "http_server_chi",
+		},
+		{
+			name:       "chi/full",
+			fixture:    "fixtures/full/service.go",
+			strategy:   &ChiStrategy{},
+			filename:   "server_chi_gen.go",
+			goldenName: "http_server_chi_full",
+		},
+		{
+			name:       "echo/basic",
+			fixture:    "fixtures/basic/service.go",
+			strategy:   &EchoStrategy{},
+			filename:   "server_echo_gen.go",
+			goldenName: "http_server_echo",
+		},
+		{
+			name:       "echo/full",
+			fixture:    "fixtures/full/service.go",
+			strategy:   &EchoStrategy{},
+			filename:   "server_echo_gen.go",
+			goldenName: "http_server_echo_full",
+		},
 	}
-	if files == nil || len(files) == 0 {
-		t.Fatal("пустой результат генерации")
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			module, types := golden.ParseAndGenerate(t, ".", tt.fixture)
+
+			plugin := NewPlugin(tt.strategy)
+
+			pluginReg := gomosaic.NewPluginRegistry()
+			pluginReg.MustRegister(plugin)
+
+			fs := gomosaic.NewMemoryFileSystem("test")
+
+			cg := gomosaic.NewCodeGenerator(pluginReg, gomosaic.DefaultTransformRegistry(), fs)
+
+			ctx := gomosaic.ContextWithOutputDir(context.Background(), module.Dir+"/internal/controller")
+
+			outputFiles, err := cg.Generate(ctx, module, types, plugin.Name())
+			if err != nil {
+				t.Fatalf("Generate() error = %v", err)
+			}
+
+			if len(outputFiles) == 0 {
+				t.Fatal("пустой результат генерации")
+			}
+
+			fileContent, ok := fs.File(tt.filename)
+			if !ok {
+				t.Fatalf("файл %s не найден в сгенерированных: %v", tt.filename, outputFiles)
+			}
+
+			golden.AssertBytes(t, fileContent, tt.goldenName)
+		})
 	}
-
-	golden.AssertFile(t, files["server_chi_gen.go"].(*gomosaic.GoFile), "http_server_chi")
-}
-
-func TestHTTPServerFull_Golden(t *testing.T) {
-	module, types := golden.ParseAndGenerate(t, ".", "fixtures/full/service.go")
-
-	plugin := NewPlugin(&ChiStrategy{})
-	ctx := gomosaic.ContextWithOutputDir(context.Background(), module.Dir+"/internal/controller")
-
-	files, err := plugin.Generate(ctx, module, types)
-	if err != nil {
-		t.Fatalf("Generate() error = %v", err)
-	}
-	if files == nil || len(files) == 0 {
-		t.Fatal("пустой результат генерации")
-	}
-
-	golden.AssertFile(t, files["server_chi_gen.go"].(*gomosaic.GoFile), "http_server_chi_full")
 }

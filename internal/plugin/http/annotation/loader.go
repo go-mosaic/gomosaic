@@ -12,6 +12,10 @@ import (
 
 const defaultMemory = 32 << 20 // 32 MB
 
+// UseOpt содержит аннотации для включения различных функций
+// @docgen
+// @docgen-descr "Аннотации для включения различных функций"
+// @docgen-title "Аннотации включения"
 type UseOpt struct {
 	// @docgen-title "Включить обработку запросов multipart/form-data"
 	// @docgen-descr "Включает поддержу запросов в фрмате multipart"
@@ -21,7 +25,9 @@ type UseOpt struct {
 	URLEncoded bool `option:"url-encoded"`
 }
 
+// MethodOpt содержит аннотации для методов запроса
 // @docgen
+// @docgen-descr "Аннотации для методов запроса"
 // @docgen-title "Аннотации метода"
 type MethodOpt struct {
 	// @docgen-title "Формат времени для запроса"
@@ -68,6 +74,7 @@ type MethodOpt struct {
 	CookieResults []*MethodResultOpt
 }
 
+// SingleOpt опции для оборачивания запроса
 type SingleOpt struct {
 	// @docgen-title "Включает оборачивание тела запроса"
 	// @docgen-descr "Если аннтотация установлена и в методе есть только один входящий параметр генератор его обернет в JSON вида <code>{\"paramNme\": paramValue}</code>"
@@ -127,9 +134,10 @@ type MethodParamNameOpt struct {
 	Format string `option:",fromParam" valid:"in,params:'lowerCamel kebab screamingKebab snake screamingSnake'" default:"lowerCamel"`
 }
 
+// MethodParamOpt опции параметров метода
 // @docgen
-// @docgen-title "Аннотации параметров метода"
-// @docgen-descr "Аннотации параметров метода применяются только для параметров метода"
+// @docgen-title "Опции параметров метода"
+// @docgen-descr "Опции параметров метода применяются только для параметров метода"
 type MethodParamOpt struct {
 	// @docgen-title "Имя параметра в запросе"
 	// @docgen-descr "Имя параметра в запросе в зависимости от типа (загловок, тело запроса)"
@@ -168,6 +176,7 @@ type DefaultOpt struct {
 	Accept string `option:"accept"`
 }
 
+// IfaceOpt опции для интерфейса
 // @docgen
 // @docgen-title "Аннотации интерфейса"
 type IfaceOpt struct {
