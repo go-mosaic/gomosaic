@@ -4,10 +4,8 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
-// QualFunc функция квалификации имени пакета для jen.
 type QualFunc func(pkgPath, name string) func(s *jen.Statement)
 
-// Transformer объединяет парсер и форматер для типа.
 type Transformer interface {
 	Parser
 	Formatter
@@ -167,7 +165,7 @@ func (tr *Transform) parse(typeInfo *TypeInfo) jen.Code {
 			Parse()
 	}
 
-	return jen.Null()
+	return nil
 }
 
 func (tr *Transform) format(typeInfo *TypeInfo) jen.Code {

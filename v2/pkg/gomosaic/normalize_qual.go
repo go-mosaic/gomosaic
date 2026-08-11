@@ -5,7 +5,6 @@ import (
 	"strings"
 )
 
-// PkgPathNormalizer нормализует пути пакетов.
 type PkgPathNormalizer struct {
 	modInfo   *ModuleInfo
 	outputDir string

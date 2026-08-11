@@ -19,6 +19,8 @@ type SearchParams struct {
 	Offset int
 }
 
+// UserService интерфейс сервиса пользователей
+// @gomosaic
 // @http-default accept=application/json
 // @http-default content-type=application/json
 // @http-client-enable

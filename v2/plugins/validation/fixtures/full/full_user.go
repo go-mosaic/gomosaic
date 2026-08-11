@@ -1,6 +1,7 @@
 package model
 
-// User — модель с полным набором валидаций
+// User модель с полным набором валидаций
+// @gomosaic
 type User struct {
 	// @validate required min-len=2 max-len=50
 	Name string

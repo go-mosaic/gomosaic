@@ -109,72 +109,72 @@ type TypeInfo struct {
 
 // String возвращает строковое представление типа
 func (t *TypeInfo) String() string {
-	var result string
+	var result strings.Builder
 
 	if t.IsPtr {
-		result += "*"
+		result.WriteString("*")
 	}
 	if t.IsSlice {
-		result += "[]"
+		result.WriteString("[]")
 	}
 	if t.IsArray {
-		result += fmt.Sprintf("[%d]", t.ArrayLen)
+		fmt.Fprintf(&result, "[%d]", t.ArrayLen)
 	}
 	if t.IsMap {
-		result += fmt.Sprintf("map[%s]", t.KeyType.String())
+		fmt.Fprintf(&result, "map[%s]", t.KeyType.String())
 	}
 
 	if t.Package != "" {
-		result += t.Package + "."
+		result.WriteString(t.Package + ".")
 	}
-	result += t.Name
+	result.WriteString(t.Name)
 
 	// Добавляем параметры типа для дженерик-типов (только для неинстанцированных типов)
 	if !t.IsInstantiated && len(t.TypeParams) > 0 {
-		result += "["
+		result.WriteString("[")
 		for i, param := range t.TypeParams {
 			if i > 0 {
-				result += ", "
+				result.WriteString(", ")
 			}
-			result += param.String()
+			result.WriteString(param.String())
 		}
-		result += "]"
+		result.WriteString("]")
 	}
 
 	// Для инстанцированных типов показываем аргументы типа
 	if t.IsInstantiated && len(t.TypeParams) > 0 {
-		result += "["
+		result.WriteString("[")
 		for i, arg := range t.TypeParams {
 			if i > 0 {
-				result += ", "
+				result.WriteString(", ")
 			}
-			result += arg.String()
+			result.WriteString(arg.String())
 		}
-		result += "]"
+		result.WriteString("]")
 	}
 
 	// Добавляем термы объединения для union типов
 	if t.IsUnion && len(t.UnionTerms) > 0 {
-		result += "("
+		result.WriteString("(")
 		for i, term := range t.UnionTerms {
 			if i > 0 {
-				result += " | "
+				result.WriteString(" | ")
 			}
-			result += term.String()
+			result.WriteString(term.String())
 		}
-		result += ")"
+		result.WriteString(")")
 	}
 
 	if t.ElemType != nil && !t.IsTypeParam && !t.IsInstantiated {
-		result += t.ElemType.String()
+		result.WriteString(t.ElemType.String())
 	}
 
 	// Для параметров типа добавляем ограничение
 	if t.IsTypeParam && t.ElemType != nil {
-		result += " " + t.ElemType.String()
+		result.WriteString(" " + t.ElemType.String())
 	}
 
-	return result
+	return result.String()
 }
 
 type AnnotationInfo struct {
@@ -207,7 +207,7 @@ func (ts *Annotations) Has(key string) bool {
 	return ok
 }
 
-// TypeInfo информация о типе
+// NameTypeInfo информация о типе
 type NameTypeInfo struct {
 	Package     *PackageInfo  // Информация о пакете
 	Name        string        // Имя типа
@@ -374,8 +374,7 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 				Type:        typeInfo,
 			}
 
-			for i := range named.NumMethods() {
-				method := named.Method(i)
+			for method := range named.Methods() {
 				if !method.Exported() {
 					continue
 				}
@@ -476,8 +475,7 @@ func funcToMethodInfo(pkg *packages.Package, method *types.Func) (*MethodInfo, e
 
 // tuplesToVarsInfo преобразует types.Tuple в []VarInfo
 func tuplesToVarsInfo(pkg *packages.Package, tuple *types.Tuple) (varsInfo []*VarInfo, err error) {
-	for i := range tuple.Len() {
-		v := tuple.At(i)
+	for v := range tuple.Variables() {
 		varInfo, err := varToVarInfo(pkg, v)
 		if err != nil {
 			return nil, err
@@ -580,8 +578,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 			typeInfo.IsInstantiated = true
 			typeArgs := make([]*TypeInfo, 0, t.TypeArgs().Len())
 
-			for i := 0; i < t.TypeArgs().Len(); i++ {
-				typeArg := t.TypeArgs().At(i)
+			for typeArg := range t.TypeArgs().Types() {
 
 				argInfo, err := typeToTypeInfo(pkg, typeArg)
 				if err != nil {
@@ -633,8 +630,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		interfaceInfo := &InterfaceInfo{}
 
 		// Обработка методов интерфейса
-		for i := range t.NumMethods() {
-			method := t.Method(i)
+		for method := range t.Methods() {
 			if !method.Exported() {
 				continue
 			}
@@ -656,8 +652,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 		if t.TypeParams() != nil {
 			typeParams = make([]*TypeInfo, 0, t.TypeParams().Len())
 
-			for i := 0; i < t.TypeParams().Len(); i++ {
-				typeParam := t.TypeParams().At(i)
+			for typeParam := range t.TypeParams().TypeParams() {
 
 				paramInfo, err := typeToTypeInfo(pkg, typeParam)
 				if err != nil {
@@ -704,8 +699,7 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 
 		terms := make([]*TypeInfo, 0, t.Len())
 
-		for i := 0; i < t.Len(); i++ {
-			term := t.Term(i)
+		for term := range t.Terms() {
 			termInfo, err := typeToTypeInfo(pkg, term.Type())
 
 			if err != nil {

@@ -102,7 +102,6 @@ func (g *ServerGenerator) genQueryParamsFunc(
 						group.Id(name).Dot(f.Name).Op("=").Make(jenutils.TypeInfoQual(f.Type, g.qualifier.Qual), jen.Len(valueID))
 
 						group.For(jen.List(jen.Id("i"), jen.Id("val")).Op(":=").Range().Add(valueID)).BlockFunc(func(group *jen.Group) {
-
 							group.Add(
 								typetransform.For(f.Type.ElemType).
 									SetAssignID(jen.Id(name).Dot(f.Name).Index(jen.Id("i"))).
@@ -111,9 +110,7 @@ func (g *ServerGenerator) genQueryParamsFunc(
 										jen.Return(jen.Err()),
 									).Parse(),
 							)
-
 						})
-
 					} else {
 						valueID := jen.Id("q").Dot("Get").Call(jen.Lit(tag.Name))
 
@@ -125,7 +122,6 @@ func (g *ServerGenerator) genQueryParamsFunc(
 							).Parse(),
 						)
 					}
-
 				}
 			}
 		} else {
@@ -166,7 +162,6 @@ func (g *ServerGenerator) genNonBodyParamsFunc(
 	var transformCodes []jen.Code
 
 	for _, p := range params {
-
 		if p.Var.Type.IsNamed && p.Var.Type.ElemType.Struct != nil {
 			name := "param" + strcase.ToCamel(p.Name)
 

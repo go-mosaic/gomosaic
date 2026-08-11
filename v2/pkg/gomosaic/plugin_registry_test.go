@@ -75,7 +75,7 @@ func TestPluginRegistry_MustRegister(t *testing.T) {
 			t.Error("MustRegister() при дубликате должна паниковать")
 		}
 	}()
-	
+
 	r.MustRegister(&testPlugin{name: "ok"})
 }
 

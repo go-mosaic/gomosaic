@@ -1,4 +1,3 @@
-// Package option предоставляет парсер опций из аннотаций.
 package option
 
 import (
@@ -11,9 +10,9 @@ import (
 )
 
 // Unmarshal заполняет структуру opts значениями из аннотаций с префиксом prefix.
-func Unmarshal(prefix string, annotations gomosaic.Annotations, opts interface{}) error {
+func Unmarshal(prefix string, annotations gomosaic.Annotations, opts any) error {
 	v := reflect.ValueOf(opts)
-	if v.Kind() != reflect.Ptr || v.Elem().Kind() != reflect.Struct {
+	if v.Kind() != reflect.Pointer || v.Elem().Kind() != reflect.Struct {
 		return fmt.Errorf("opts должен быть указателем на структуру")
 	}
 	v = v.Elem()
@@ -42,7 +41,7 @@ func unmarshalStruct(v reflect.Value, t reflect.Type, ann *gomosaic.AnnotationIn
 		// Для inline-полей — обрабатываем аннотацию на вложенной структуре
 		if tp.inline && tp.name == "" {
 			fv := v.Field(i)
-			if fv.Kind() == reflect.Ptr {
+			if fv.Kind() == reflect.Pointer {
 				if fv.IsNil() {
 					fv.Set(reflect.New(fv.Type().Elem()))
 				}
@@ -143,15 +142,13 @@ func setFieldValue(field reflect.Value, ann *gomosaic.AnnotationInfo, tp tagPart
 			if tp.fromOption {
 				// Для fromOption собираем значения из аннотаций
 				vals := make([]string, 0)
-				for _, p := range ann.Params {
-					vals = append(vals, p)
-				}
+				vals = append(vals, ann.Params...)
 				field.Set(reflect.ValueOf(vals))
 			} else {
 				field.Set(reflect.ValueOf(ann.Params))
 			}
 		}
-	case reflect.Ptr:
+	case reflect.Pointer:
 		// Для указателей создаём экземпляр и заполняем
 		if field.IsNil() {
 			field.Set(reflect.New(field.Type().Elem()))

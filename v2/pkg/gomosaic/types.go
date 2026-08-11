@@ -1,23 +1,21 @@
-// Package gomosaic предоставляет основу для генерации кода на основе Go-интерфейсов.
 package gomosaic
 
 import (
 	"fmt"
 	"go/token"
 	"strconv"
+	"strings"
 
 	"github.com/fatih/structtag"
 
 	"github.com/go-mosaic/gomosaic/v2/pkg/annotation"
 )
 
-// PackageInfo содержит информацию о пакете Go.
 type PackageInfo struct {
 	Name string
 	Path string
 }
 
-// BasicKind описывает вид базового типа.
 type BasicKind int
 
 const (
@@ -54,7 +52,6 @@ const (
 	Rune = Int32
 )
 
-// BasicInfo представляет собой набор флагов, описывающих свойства базового типа.
 type BasicInfo int
 
 const (
@@ -71,7 +68,6 @@ const (
 	IsConstType = IsBoolean | IsNumeric | IsString
 )
 
-// TypeInfo описывает тип поля или параметра.
 type TypeInfo struct {
 	Name           string
 	Package        string
@@ -100,77 +96,75 @@ type TypeInfo struct {
 }
 
 func (t *TypeInfo) String() string {
-	var result string
+	var result strings.Builder
 
 	if t.IsPtr {
-		result += "*"
+		result.WriteString("*")
 	}
 	if t.IsSlice {
-		result += "[]"
+		result.WriteString("[]")
 	}
 	if t.IsArray {
-		result += fmt.Sprintf("[%d]", t.ArrayLen)
+		fmt.Fprintf(&result, "[%d]", t.ArrayLen)
 	}
 	if t.IsMap {
-		result += fmt.Sprintf("map[%s]", t.KeyType.String())
+		fmt.Fprintf(&result, "map[%s]", t.KeyType.String())
 	}
 
 	if t.Package != "" {
-		result += t.Package + "."
+		result.WriteString(t.Package + ".")
 	}
-	result += t.Name
+	result.WriteString(t.Name)
 
 	if !t.IsInstantiated && len(t.TypeParams) > 0 {
-		result += "["
+		result.WriteString("[")
 		for i, param := range t.TypeParams {
 			if i > 0 {
-				result += ", "
+				result.WriteString(", ")
 			}
-			result += param.String()
+			result.WriteString(param.String())
 		}
-		result += "]"
+		result.WriteString("]")
 	}
 
 	if t.IsInstantiated && len(t.TypeParams) > 0 {
-		result += "["
+		result.WriteString("[")
 		for i, arg := range t.TypeParams {
 			if i > 0 {
-				result += ", "
+				result.WriteString(", ")
 			}
-			result += arg.String()
+			result.WriteString(arg.String())
 		}
-		result += "]"
+		result.WriteString("]")
 	}
 
 	if t.IsUnion && len(t.UnionTerms) > 0 {
-		result += "("
+		result.WriteString("(")
 		for i, term := range t.UnionTerms {
 			if i > 0 {
-				result += " | "
+				result.WriteString(" | ")
 			}
-			result += term.String()
+			result.WriteString(term.String())
 		}
-		result += ")"
+		result.WriteString(")")
 	}
 
 	if t.ElemType != nil && !t.IsTypeParam && !t.IsInstantiated {
-		result += t.ElemType.String()
+		result.WriteString(t.ElemType.String())
 	}
 
 	if t.IsTypeParam && t.ElemType != nil {
-		result += " " + t.ElemType.String()
+		result.WriteString(" " + t.ElemType.String())
 	}
 
-	return result
+	return result.String()
 }
 
-// AnnotationInfo содержит информацию об аннотации.
 type AnnotationInfo struct {
 	*annotation.Annotation
 	Position *PosInfo
 }
 
-// Annotations представляет список аннотаций.
 type Annotations []*AnnotationInfo
 
 func (ts *Annotations) GetSlice(key string) (annotations []*AnnotationInfo) {

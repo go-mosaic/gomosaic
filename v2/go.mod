@@ -1,8 +1,6 @@
 module github.com/go-mosaic/gomosaic/v2
 
-go 1.24
-
-toolchain go1.24.1
+go 1.26.1
 
 require (
 	github.com/dave/jennifer v1.7.0

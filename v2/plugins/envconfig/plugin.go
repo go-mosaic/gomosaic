@@ -1,4 +1,4 @@
-// Package envconfig предоставляет плагин для генерации кода загрузки
+// Package envconfig предоставляет плагин для генерации кода, загрузки
 // переменных окружения в поля структуры на основе аннотаций.
 //
 // Поддерживаемые аннотации:
@@ -77,8 +77,8 @@ const (
 
 // ParseValidation парсит строку валидации "required max-len=100 min-len=3".
 func ParseValidation(validate string) (required bool, maxLen, minLen int, err error) {
-	parts := strings.Fields(validate)
-	for _, p := range parts {
+	parts := strings.FieldsSeq(validate)
+	for p := range parts {
 		switch {
 		case p == "required":
 			required = true
@@ -100,9 +100,8 @@ func ParseValidation(validate string) (required bool, maxLen, minLen int, err er
 }
 
 // Load загружает аннотации конфигурации из типов.
-func Load(types []*gomosaic.NameTypeInfo) (structs []*StructOpt, errs error) {
+func Load(types []*gomosaic.NameTypeInfo) (structs []*StructOpt) {
 	for _, nameTypeInfo := range types {
-		// Обрабатываем только структуры с @gomosaic
 		if nameTypeInfo.Type.Struct == nil {
 			continue
 		}
@@ -115,10 +114,7 @@ func Load(types []*gomosaic.NameTypeInfo) (structs []*StructOpt, errs error) {
 		structs = append(structs, st)
 	}
 
-	if errs != nil {
-		return nil, errs
-	}
-	return structs, nil
+	return structs
 }
 
 // loadFields загружает аннотации полей.
@@ -126,22 +122,18 @@ func loadFields(fields []*gomosaic.VarInfo) []*FieldOpt {
 	var result []*FieldOpt
 
 	for _, f := range fields {
-		// Пропускаем неэкспортируемые поля
 		if !isExported(f.Name) {
 			continue
 		}
 
 		opt := &FieldOpt{Var: f}
 
-		// Имя переменной окружения по умолчанию — SCREAMING_SNAKE_CASE
 		opt.EnvName = strcase.ToScreamingSnake(f.Name)
 
-		// Парсим @env-name
 		if ann, ok := f.Annotations.Get("env-name"); ok && len(ann.Params) > 0 {
 			opt.EnvName = ann.Params[0]
 		}
 
-		// Парсим @env-validate
 		if ann, ok := f.Annotations.Get("env-validate"); ok {
 			opt.Validate = strings.Join(ann.Params, " ")
 			required, maxLen, minLen, err := ParseValidation(opt.Validate)
@@ -152,12 +144,10 @@ func loadFields(fields []*gomosaic.VarInfo) []*FieldOpt {
 			}
 		}
 
-		// Парсим @env-default
 		if ann, ok := f.Annotations.Get("env-default"); ok && len(ann.Params) > 0 {
 			opt.Default = ann.Params[0]
 		}
 
-		// Для структур — рекурсивно загружаем вложенные поля
 		if isStructType(f.Type) {
 			opt.Children = loadFields(f.Type.ElemType.Struct.Fields)
 		}
@@ -168,7 +158,6 @@ func loadFields(fields []*gomosaic.VarInfo) []*FieldOpt {
 	return result
 }
 
-// isExported проверяет, экспортируется ли имя поля.
 func isExported(name string) bool {
 	if name == "" {
 		return false
@@ -176,7 +165,6 @@ func isExported(name string) bool {
 	return name[0] >= 'A' && name[0] <= 'Z'
 }
 
-// isStructType проверяет, является ли тип структурой.
 func isStructType(t *gomosaic.TypeInfo) bool {
 	if t == nil {
 		return false
@@ -190,5 +178,4 @@ func isStructType(t *gomosaic.TypeInfo) bool {
 	return t != nil && t.Struct != nil
 }
 
-// Ensure package compiles.
 var _ = multierror.Append

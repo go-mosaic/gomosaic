@@ -47,6 +47,7 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/v2/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/v2/pkg/strcase"
+	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
 )
 
 // BodyFn — функция, генерирующая тело метода.
@@ -61,9 +62,6 @@ type Config struct {
 	// используется для имён структур и конструкторов.
 	MiddlewareName string
 
-	// Annotation — префикс аннотации (например, "log", "metric").
-	Annotation string
-
 	// Fields — дополнительные поля структуры middleware (пары имя-тип).
 	Fields []jen.Code
 
@@ -77,12 +75,10 @@ type Config struct {
 	OutputFile string
 }
 
-// Plugin — унифицированный middleware-плагин.
 type Plugin struct {
 	cfg Config
 }
 
-// NewPlugin создает новый middleware-плагин с заданной конфигурацией.
 func NewPlugin(cfg Config) *Plugin {
 	if cfg.OutputFile == "" {
 		cfg.OutputFile = cfg.Name + "_gen.go"
@@ -90,14 +86,11 @@ func NewPlugin(cfg Config) *Plugin {
 	return &Plugin{cfg: cfg}
 }
 
-// Name возвращает имя плагина.
 func (p *Plugin) Name() string { return p.cfg.Name }
 
-// Generate генерирует код middleware.
 func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (files map[string]gomosaic.File, errs error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 
-	// Загружаем аннотации
 	services, err := p.loadAnnotations(module, types)
 	if err != nil {
 		return nil, err
@@ -138,24 +131,21 @@ func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, type
 	return map[string]gomosaic.File{p.cfg.OutputFile: f}, errs
 }
 
-// loadAnnotations загружает аннотации для сервисов.
 func (p *Plugin) loadAnnotations(module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) ([]*gomosaic.NameTypeInfo, error) {
 	var services []*gomosaic.NameTypeInfo
 
-	for _, nameTypeInfo := range types {
-		if nameTypeInfo.Type.Interface == nil {
-			continue
-		}
-		// Проверяем наличие аннотации @<prefix>
-		if nameTypeInfo.Annotations.Has(p.cfg.Annotation) {
-			services = append(services, nameTypeInfo)
-		}
+	annotations, err := annotation.Load(module, types)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, annotation := range annotations {
+		services = append(services, annotation.NameTypeInfo)
 	}
 
 	return services, nil
 }
 
-// Generator генерирует middleware-структуру и методы.
 type Generator struct {
 	nameTypeInfo  *gomosaic.NameTypeInfo
 	structName    string
@@ -165,7 +155,6 @@ type Generator struct {
 	qualFunc      gomosaic.QualFunc
 }
 
-// Generate генерирует код структуры и конструктора middleware.
 func (g *Generator) Generate() (jen.Code, error) {
 	group := jen.NewFile("")
 
@@ -214,7 +203,6 @@ func (g *Generator) Generate() (jen.Code, error) {
 	return group, nil
 }
 
-// GenerateMethod добавляет метод в middleware.
 func (g *Generator) GenerateMethod(m *gomosaic.MethodInfo, beforeNextBodyFn, afterNextBodyFn BodyFn) {
 	resultList := jen.Null()
 
@@ -264,5 +252,4 @@ func (g *Generator) GenerateMethod(m *gomosaic.MethodInfo, beforeNextBodyFn, aft
 	g.methods = append(g.methods, code)
 }
 
-// Ensure Plugin implements plugin.Generator.
 var _ gomosaic.Generator = (*Plugin)(nil)

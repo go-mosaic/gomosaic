@@ -1,0 +1,78 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - dogsled
+    - dupl
+    - errcheck
+    - exhaustive
+    - goconst
+    - gocritic
+    - goprintffuncname
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - mnd
+    - nakedret
+    - noctx
+    - nolintlint
+    - staticcheck
+    - unconvert
+    - unparam
+    - unused
+    - whitespace
+  settings:
+    dupl:
+      threshold: 700
+    exhaustive:
+      default-signifies-exhaustive: true
+    funlen:
+      lines: 200
+      statements: 80
+    goconst:
+      min-occurrences: 4
+    gosec:
+      excludes:
+        - G112
+        - G115
+        - G114
+    staticcheck:
+      checks:
+        - -S1001
+        - -SA1019
+        - all
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - .*_gen\.go
+      - .*_test\.go
+      - internal/cli/deps
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - goimports
+  settings:
+    gci:
+      sections:
+        - standard
+        - default
+        - prefix(github.com/go-mosaic/gomosaic)
+  exclusions:
+    generated: lax
+    paths:
+      - .*_gen\.go
+      - .*_test\.go
+      - internal/cli/deps
+      - third_party$
+      - builtin$
+      - examples$

@@ -72,7 +72,6 @@ func (g *generator) generateSpec(services []*annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
 	// OpenAPI Handler
-	group.Comment("OpenAPIHandler возвращает HTTP-хендлер для OpenAPI-спецификации.")
 	group.Func().Id("OpenAPIHandler").Params().Qual("net/http", "Handler").BlockFunc(func(body *jen.Group) {
 		body.Var().Id("spec").Op("=").Map(jen.String()).Interface().ValuesFunc(func(dict *jen.Group) {
 			dict.Add(jen.Lit("openapi")).Op(":").Add(jen.Lit("3.0.3"))

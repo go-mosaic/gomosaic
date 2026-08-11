@@ -17,7 +17,7 @@ func (p *testPlugin) Generate(_ context.Context, _ *ModuleInfo, _ []*NameTypeInf
 }
 
 func TestBuilder_NewBuilder(t *testing.T) {
-	b := NewBuilder("test", "./output")
+	b := NewBuilder()
 	if b == nil {
 		t.Fatal("NewBuilder() returned nil")
 	}
@@ -25,13 +25,15 @@ func TestBuilder_NewBuilder(t *testing.T) {
 	if b.pluginReg == nil {
 		t.Error("plugin registry не должен быть nil")
 	}
+
 	if b.transformReg == nil {
 		t.Error("transform registry не должен быть nil")
 	}
 }
 
 func TestBuilder_WithPlugins(t *testing.T) {
-	b := NewBuilder("test", "./output")
+	b := NewBuilder()
+
 	b.WithPlugins(
 		&testPlugin{name: "plugin-1"},
 		&testPlugin{name: "plugin-2"},
@@ -43,19 +45,23 @@ func TestBuilder_WithPlugins(t *testing.T) {
 }
 
 func TestBuilder_Build(t *testing.T) {
-	b := NewBuilder("test", "./output")
+	b := NewBuilder()
+
 	b.WithPlugins(&testPlugin{name: "test"})
 
-	gen := b.Build()
+	fs := NewFileSystem("test", "./output")
+
+	gen := b.Build(fs)
 	if gen == nil {
 		t.Fatal("Build() returned nil")
 	}
 }
 
 func TestBuilder_WithTransformer(t *testing.T) {
-	b := NewBuilder("test", "./output")
+	b := NewBuilder()
 
 	called := false
+
 	b.WithTransformer(func() Transformer {
 		called = true
 		return &testTransformer{}
@@ -68,7 +74,8 @@ func TestBuilder_WithTransformer(t *testing.T) {
 
 func TestBuilder_WithTransformRegistry(t *testing.T) {
 	customReg := NewTransformRegistry()
-	b := NewBuilder("test", "./output", WithTransformRegistry(customReg))
+
+	b := NewBuilder(WithTransformRegistry(customReg))
 
 	if b.transformReg != customReg {
 		t.Error("кастомный реестр не был установлен")
@@ -76,7 +83,7 @@ func TestBuilder_WithTransformRegistry(t *testing.T) {
 }
 
 func TestBuilder_ChainedMethods(t *testing.T) {
-	b := NewBuilder("test", "./output").
+	b := NewBuilder().
 		WithPlugins(&testPlugin{name: "p1"}).
 		WithPlugins(&testPlugin{name: "p2"}).
 		WithPlugins(&testPlugin{name: "p3"})
@@ -148,6 +155,7 @@ func TestHasError(t *testing.T) {
 	if !ok {
 		t.Error("HasError() должен найти ошибку")
 	}
+
 	if v.Name != "err" {
 		t.Errorf("имя ошибки = %s, want err", v.Name)
 	}
@@ -155,6 +163,7 @@ func TestHasError(t *testing.T) {
 	varsNoErr := []*VarInfo{
 		{Name: "result", IsError: false},
 	}
+
 	_, ok = HasError(varsNoErr)
 	if ok {
 		t.Error("HasError() не должен находить ошибку")

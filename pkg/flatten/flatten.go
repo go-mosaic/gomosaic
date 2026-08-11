@@ -1,6 +1,8 @@
 package flatten
 
 import (
+	"strings"
+
 	"github.com/dave/jennifer/jen"
 
 	"github.com/go-mosaic/gomosaic/pkg/gomosaic"
@@ -9,14 +11,14 @@ import (
 type Paths []PathName
 
 func (p Paths) String() string {
-	var path string
+	var path strings.Builder
 	for i, v := range p {
 		if i > 0 {
-			path += "."
+			path.WriteString(".")
 		}
-		path += v.Name
+		path.WriteString(v.Name)
 	}
-	return path
+	return path.String()
 }
 
 type FlattenPath struct {

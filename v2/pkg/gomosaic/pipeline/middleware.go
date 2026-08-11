@@ -7,7 +7,6 @@ import (
 )
 
 // Middleware представляет промежуточный обработчик, оборачивающий этап генерации.
-// Аналог HTTP middleware, но для процесса генерации кода.
 type Middleware func(next StageFunc) StageFunc
 
 // StageFunc функция обработки этапа.
@@ -24,7 +23,6 @@ func Chain(middlewares ...Middleware) Middleware {
 	}
 }
 
-// LoggingMiddleware middleware для логирования этапов генерации.
 func LoggingMiddleware(logger *log.Logger) Middleware {
 	return func(next StageFunc) StageFunc {
 		return func(ctx context.Context, data *StageData) (*StageData, error) {
@@ -45,7 +43,6 @@ func LoggingMiddleware(logger *log.Logger) Middleware {
 	}
 }
 
-// RecoveryMiddleware перехватывает паники в процессе генерации.
 func RecoveryMiddleware() Middleware {
 	return func(next StageFunc) StageFunc {
 		return func(ctx context.Context, data *StageData) (result *StageData, err error) {
@@ -61,7 +58,6 @@ func RecoveryMiddleware() Middleware {
 	}
 }
 
-// PanicError представляет ошибку, возникшую при панике.
 type PanicError struct {
 	Value any
 }

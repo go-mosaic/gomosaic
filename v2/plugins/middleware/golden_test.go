@@ -8,126 +8,96 @@ import (
 
 	"github.com/go-mosaic/gomosaic/v2/internal/golden"
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
-	"github.com/go-mosaic/gomosaic/v2/pkg/strcase"
 )
 
 func TestMiddlewarePlugin_Golden(t *testing.T) {
-	module, types := golden.ParseAndGenerate(t, ".", "fixtures/service.go")
-
-	cfg := Config{
-		Name:           "log-middleware",
-		MiddlewareName: "Log",
-		Annotation:     "log",
-		Fields: []jen.Code{
-			jen.Id("logger"),
-			jen.Qual(gomosaic.SpanPkg, "Logger"),
+	tests := []struct {
+		name           string
+		fixtureFile    string
+		config         Config
+		outputFileName string
+		goldenName     string
+	}{
+		{
+			name:        "LogMiddleware",
+			fixtureFile: "fixtures/logservice/log_service.go",
+			config: Config{
+				Name:           "log-middleware",
+				MiddlewareName: "Log",
+				Fields: []jen.Code{
+					jen.Id("logger"),
+					jen.Qual(gomosaic.SpanPkg, "Logger"),
+				},
+				BeforeFn: func(group *jen.Group) {
+					group.Id("span").Op(":=").Qual(gomosaic.SpanPkg, "StartLogSpan").Call(
+						jen.Id("m").Dot("logger"),
+						jen.Id("ctx"),
+					)
+				},
+				AfterFn: func(group *jen.Group) {
+					group.Id("span").Dot("Finish").Call(jen.Id("ctx"))
+				},
+				OutputFile: "log_middleware_gen.go",
+			},
+			outputFileName: "log_middleware_gen.go",
+			goldenName:     "log_middleware",
 		},
-		BeforeFn: func(group *jen.Group) {
-			group.Id("span").Op(":=").Qual(gomosaic.SpanPkg, "StartLogSpan").Call(
-				jen.Id("m").Dot("logger"),
-				jen.Id("ctx"),
-			)
+		{
+			name:        "MetricMiddleware",
+			fixtureFile: "fixtures/metricservice/metric_service.go",
+			config: Config{
+				Name:           "metric-middleware",
+				MiddlewareName: "Metric",
+				Fields: []jen.Code{
+					jen.Id("collector"),
+					jen.Qual(gomosaic.SpanPkg, "MetricsCollector"),
+				},
+				BeforeFn: func(group *jen.Group) {
+					group.Id("span").Op(":=").Qual(gomosaic.SpanPkg, "StartMetricSpan").Call(
+						jen.Id("m").Dot("collector"),
+						jen.Id("ctx"),
+					)
+				},
+				AfterFn: func(group *jen.Group) {
+					group.Id("span").Dot("Finish").Call(jen.Id("ctx"))
+				},
+				OutputFile: "metric_middleware_gen.go",
+			},
+			outputFileName: "metric_middleware_gen.go",
+			goldenName:     "metric_middleware",
 		},
-		AfterFn: func(group *jen.Group) {
-			group.Comment("Завершение лог-спана")
-			group.Id("span").Dot("Finish").Call(jen.Id("ctx"))
-		},
-		OutputFile: "log_middleware_gen.go",
 	}
 
-	outputDir := module.Dir + "/internal/middleware"
-	f := gomosaic.NewGoFile(module, outputDir)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			module, types := golden.ParseAndGenerate(t, ".", tt.fixtureFile)
 
-	for _, nt := range types {
-		if nt.Type.Interface == nil {
-			continue
-		}
-		if !nt.Annotations.Has(cfg.Annotation) {
-			continue
-		}
-		serviceName := nt.Name
-		g := &Generator{
-			nameTypeInfo:  nt,
-			structName:    strcase.ToCamel(serviceName) + cfg.MiddlewareName + "Middleware",
-			constructName: cfg.MiddlewareName + strcase.ToCamel(serviceName) + "Middleware",
-			qualFunc:      f.Qual,
-			params:        append([]jen.Code{}, cfg.Fields...),
-		}
-		for _, m := range nt.Type.Interface.Methods {
-			g.GenerateMethod(m, func(group *jen.Group) {
-				if cfg.BeforeFn != nil {
-					cfg.BeforeFn(group)
-				}
-			}, func(group *jen.Group) {
-				if cfg.AfterFn != nil {
-					cfg.AfterFn(group)
-				}
-			})
-		}
-		code, _ := g.Generate()
-		f.Add(code)
+			plugin := NewPlugin(tt.config)
+
+			pluginReg := gomosaic.NewPluginRegistry()
+			pluginReg.MustRegister(plugin)
+
+			fs := gomosaic.NewMemoryFileSystem("test")
+
+			cg := gomosaic.NewCodeGenerator(pluginReg, gomosaic.DefaultTransformRegistry(), fs)
+
+			ctx := gomosaic.ContextWithOutputDir(context.Background(), module.Dir+"/internal/middleware")
+
+			outputFiles, err := cg.Generate(ctx, module, types, plugin.Name())
+			if err != nil {
+				t.Fatalf("Generate() error = %v", err)
+			}
+
+			if len(outputFiles) == 0 {
+				t.Fatal("пустой результат генерации")
+			}
+
+			fileContent, ok := fs.File(tt.outputFileName)
+			if !ok {
+				t.Fatalf("файл %s не найден в сгенерированных: %v", tt.outputFileName, outputFiles)
+			}
+
+			golden.AssertBytes(t, fileContent, tt.goldenName)
+		})
 	}
-
-	golden.AssertFile(t, f, "log_middleware")
-	_ = context.Background()
-}
-
-func TestMetricMiddlewarePlugin_Golden(t *testing.T) {
-	module, types := golden.ParseAndGenerate(t, ".", "fixtures/metric_service.go")
-
-	cfg := Config{
-		Name:           "metric-middleware",
-		MiddlewareName: "Metric",
-		Annotation:     "metric",
-		Fields: []jen.Code{
-			jen.Id("collector"),
-			jen.Qual(gomosaic.SpanPkg, "MetricsCollector"),
-		},
-		BeforeFn: func(group *jen.Group) {
-			group.Id("span").Op(":=").Qual(gomosaic.SpanPkg, "StartMetricSpan").Call(
-				jen.Id("m").Dot("collector"),
-				jen.Id("ctx"),
-			)
-		},
-		AfterFn: func(group *jen.Group) {
-			group.Comment("Завершение метрик-спана")
-			group.Id("span").Dot("Finish").Call(jen.Id("ctx"))
-		},
-		OutputFile: "metric_middleware_gen.go",
-	}
-
-	outputDir := module.Dir + "/internal/middleware"
-	f := gomosaic.NewGoFile(module, outputDir)
-
-	for _, nt := range types {
-		if nt.Type.Interface == nil {
-			continue
-		}
-		if !nt.Annotations.Has(cfg.Annotation) {
-			continue
-		}
-		serviceName := nt.Name
-		g := &Generator{
-			nameTypeInfo:  nt,
-			structName:    strcase.ToCamel(serviceName) + cfg.MiddlewareName + "Middleware",
-			constructName: cfg.MiddlewareName + strcase.ToCamel(serviceName) + "Middleware",
-			qualFunc:      f.Qual,
-			params:        append([]jen.Code{}, cfg.Fields...),
-		}
-		for _, m := range nt.Type.Interface.Methods {
-			g.GenerateMethod(m, func(group *jen.Group) {
-				if cfg.BeforeFn != nil {
-					cfg.BeforeFn(group)
-				}
-			}, func(group *jen.Group) {
-				if cfg.AfterFn != nil {
-					cfg.AfterFn(group)
-				}
-			})
-		}
-		code, _ := g.Generate()
-		f.Add(code)
-	}
-
-	golden.AssertFile(t, f, "metric_middleware")
 }

@@ -1,14 +1,13 @@
 package gomosaic
 
-import (
-	"fmt"
-)
+import "fmt"
 
-// PluginRegistry управляет регистрацией и поиском плагинов.
+// PluginRegistry — реестр плагинов.
 type PluginRegistry struct {
 	plugins map[string]Generator
 }
 
+// NewPluginRegistry создает новый пустой реестр плагинов.
 func NewPluginRegistry() *PluginRegistry {
 	return &PluginRegistry{
 		plugins: make(map[string]Generator),
@@ -34,6 +33,13 @@ func (r *PluginRegistry) Register(p Generator) error {
 // MustRegister регистрирует плагин или паникует при ошибке.
 func (r *PluginRegistry) MustRegister(p Generator) {
 	if err := r.Register(p); err != nil {
+		panic(err)
+	}
+}
+
+// MustRegisterAll регистрирует несколько плагинов или паникует при ошибке.
+func (r *PluginRegistry) MustRegisterAll(plugins ...Generator) {
+	if err := r.RegisterAll(plugins...); err != nil {
 		panic(err)
 	}
 }
@@ -77,22 +83,4 @@ func (r *PluginRegistry) Names() []string {
 	}
 
 	return names
-}
-
-// DefaultPluginRegistry возвращает реестр со стандартными плагинами.
-func DefaultPluginRegistry() *PluginRegistry {
-	r := NewPluginRegistry()
-	// Стандартные плагины регистрируются здесь или в вызывающем коде
-	return r
-}
-
-// NamedGenerator расширяет Generator описанием и зависимостями.
-type NamedGenerator interface {
-	Generator
-
-	// Description возвращает описание плагина.
-	Description() string
-
-	// DependsOn возвращает список имён плагинов, от которых зависит этот плагин.
-	DependsOn() []string
 }

@@ -1,8 +1,8 @@
-
 package service
 
 import "context"
 
+// @gomosaic
 // @openapi-tags users
 type UserService interface {
 	// @http-method GET
