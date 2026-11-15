@@ -20,8 +20,9 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 	}
 
 	cfg := &packages.Config{
-		Mode: packages.NeedName | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
-		Dir:  dir,
+		Mode:       packages.NeedName | packages.NeedTypes | packages.NeedTypesInfo | packages.NeedSyntax,
+		Dir:        dir,
+		BuildFlags: []string{"-tags=gomosaic"},
 	}
 
 	pkgs, err := packages.Load(cfg, patterns...)
