@@ -23,6 +23,7 @@ func Chain(middlewares ...Middleware) Middleware {
 	}
 }
 
+// LoggingMiddleware логирует начало, конец и ошибку этапа.
 func LoggingMiddleware(logger *log.Logger) Middleware {
 	return func(next StageFunc) StageFunc {
 		return func(ctx context.Context, data *StageData) (*StageData, error) {
@@ -43,6 +44,7 @@ func LoggingMiddleware(logger *log.Logger) Middleware {
 	}
 }
 
+// RecoveryMiddleware превращает панику этапа в PanicError.
 func RecoveryMiddleware() Middleware {
 	return func(next StageFunc) StageFunc {
 		return func(ctx context.Context, data *StageData) (result *StageData, err error) {
@@ -58,6 +60,7 @@ func RecoveryMiddleware() Middleware {
 	}
 }
 
+// PanicError описывает ошибку, возникшую из-за паники в этапе.
 type PanicError struct {
 	Value any
 }

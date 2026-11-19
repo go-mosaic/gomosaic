@@ -68,5 +68,5 @@ func (g *generator) qualType(t *gomosaic.TypeInfo) *jen.Statement {
 	return jen.Id(t.Name)
 }
 
-// Ensure compilation
+// Проверка на этапе компиляции.
 var _ = multierror.Append

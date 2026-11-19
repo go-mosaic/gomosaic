@@ -7,13 +7,15 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/jenutils"
 )
 
+const minUnaryParams = 2
+
 func (g *generator) generateUnaryMethod(serviceName string, svc *ServiceOpt, m *MethodOpt) jen.Code {
 	group := jen.NewFile("")
 
 	params := m.Func.Params
 	results := m.Func.Results
 
-	if len(params) < 2 {
+	if len(params) < minUnaryParams {
 		return group
 	}
 
@@ -58,7 +60,7 @@ func (g *generator) generateUnaryMethod(serviceName string, svc *ServiceOpt, m *
 		jen.Error(),
 	).BlockFunc(func(body *jen.Group) {
 		if svc.ProtoPackage != "" {
-			reqConv := g.generateParamConversion(reqParam.Type, jen.Id("req"), reqTypeName, svc, true)
+			reqConv := g.generateParamConversion(reqParam.Type, jen.Id("req"), reqTypeName, true)
 			body.Add(reqConv)
 
 			body.List(jen.Id("serviceResp"), jen.Err()).Op(":=").Id("s").Dot("svc").Dot(methodName).Call(
@@ -69,7 +71,7 @@ func (g *generator) generateUnaryMethod(serviceName string, svc *ServiceOpt, m *
 				jen.Return(jen.Nil(), jen.Err()),
 			)
 
-			respConv := g.generateResultConversion(respParam.Type, jen.Id("serviceResp"), respTypeName, svc)
+			respConv := g.generateResultConversion(respParam.Type, jen.Id("serviceResp"), respTypeName)
 			body.Id("resp").Op(":=").Add(respConv)
 			body.Return(jen.Id("resp"), jen.Nil())
 		} else {
@@ -88,7 +90,7 @@ func (g *generator) generateUnaryMethod(serviceName string, svc *ServiceOpt, m *
 }
 
 // generateParamConversion генерирует код конвертации параметра из proto в DTO.
-func (g *generator) generateParamConversion(paramType *gomosaic.TypeInfo, protoValue jen.Code, typeName string, svc *ServiceOpt, isFromProto bool) jen.Code {
+func (g *generator) generateParamConversion(paramType *gomosaic.TypeInfo, protoValue jen.Code, typeName string, isFromProto bool) jen.Code {
 	actualType := paramType
 	for actualType.IsPtr && actualType.ElemType != nil {
 		actualType = actualType.ElemType
@@ -117,7 +119,7 @@ func (g *generator) generateParamConversion(paramType *gomosaic.TypeInfo, protoV
 }
 
 // generateResultConversion генерирует код конвертации результата из DTO в proto.
-func (g *generator) generateResultConversion(resultType *gomosaic.TypeInfo, dtoValue jen.Code, typeName string, svc *ServiceOpt) jen.Code {
+func (g *generator) generateResultConversion(resultType *gomosaic.TypeInfo, dtoValue jen.Code, typeName string) jen.Code {
 	actualType := resultType
 	for actualType.IsPtr && actualType.ElemType != nil {
 		actualType = actualType.ElemType

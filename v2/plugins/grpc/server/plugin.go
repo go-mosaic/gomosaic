@@ -5,11 +5,11 @@
 //
 // Аннотации:
 //
-//	@proto-package <package>       — указывает пакет с protobuf-типами (например: @proto-package github.com/project/api/proto)
-//	@grpc-method                   — gRPC-метод (унарный)
-//	@grpc-method server-stream     — серверный стриминг
-//	@grpc-method client-stream     — клиентский стриминг
-//	@grpc-method bidi-stream       — двунаправленный стриминг
+//	@proto-package <package>: указывает пакет с protobuf-типами (например: @proto-package github.com/project/api/proto)
+//	@grpc-method: gRPC-метод (унарный)
+//	@grpc-method server-stream: серверный стриминг
+//	@grpc-method client-stream: клиентский стриминг
+//	@grpc-method bidi-stream: двунаправленный стриминг
 //
 // Пример:
 //
@@ -29,8 +29,10 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 )
 
+// MethodType задаёт вид gRPC-метода.
 type MethodType string
 
+// Виды gRPC-методов.
 const (
 	Unary        MethodType = "unary"
 	ServerStream MethodType = "server-stream"
@@ -38,23 +40,29 @@ const (
 	BidiStream   MethodType = "bidi-stream"
 )
 
+// MethodOpt описывает gRPC-метод с его видом.
 type MethodOpt struct {
 	Func       *gomosaic.MethodInfo
 	MethodType MethodType
 }
 
+// ServiceOpt описывает gRPC-сервис с protobuf-пакетом и методами.
 type ServiceOpt struct {
 	NameTypeInfo *gomosaic.NameTypeInfo
 	ProtoPackage string // Пакет с protobuf-типами
 	Methods      []*MethodOpt
 }
 
+// Plugin генерирует gRPC-сервер.
 type Plugin struct{}
 
+// NewPlugin создаёт плагин grpc-server.
 func NewPlugin() *Plugin { return &Plugin{} }
 
+// Name реализует gomosaic.Generator.
 func (p *Plugin) Name() string { return "grpc-server" }
 
+// Generate реализует gomosaic.Generator.
 func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (map[string]gomosaic.File, error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 	transformReg := gomosaic.TransformRegistryFromContext(ctx)

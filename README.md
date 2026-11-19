@@ -1,8 +1,11 @@
-# GoMosaic утилита для генерации кода на основе GoLang интерфейсов.
+# GoMosaic утилита для генерации кода на основе интерфейсов Go.
 
 [![Lint Status](https://github.com/go-mosaic/gomosaic/workflows/golangci-lint/badge.svg)](https://github.com/go-mosaic/gomosaic/actions)
+[![Tests](https://github.com/go-mosaic/gomosaic/workflows/tests/badge.svg)](https://github.com/go-mosaic/gomosaic/actions)
 
-Утилита автоматически генерирует код для транспортного слоя HTTP-сервера и клиента на основе заданных GoLang интерфейсов. Она также поддерживает добавление middleware и загрузку конфигураций из файлов.
+Утилита генерирует код транспортного слоя HTTP-сервера и клиента по заданным интерфейсам Go. Поддерживает middleware и загрузку конфигураций из файлов.
+
+Актуальная версия v2 (`github.com/go-mosaic/gomosaic/v2`). Инструкция по переходу с v1: [руководство по миграции](v2/docs/MIGRATION.md).
 
 Пример использования:
 
@@ -23,30 +26,30 @@ type UserService interface {
 ### 2. Генерация кода:
 
 ```bash
-gomosaic http-server-chi ./internal/usecase/controller/... ./controller
+gomosaic codegen http-server-chi ./internal/usecase/controller/... ./controller
 ```
 
 ### 3. Результат:
 
 В папке ./controller будут создан файл:
 
-- server.go — HTTP-сервер Chi с роутами для методов GetUser и CreateUser.
+- server.go: HTTP-сервер Chi с роутами для методов GetUser и CreateUser.
 
 Установка:
 
 ```bash
-go install github.com/go-mosaic/gomosaic/cmd/gomosaic@latest
+go install github.com/go-mosaic/gomosaic/v2/cmd/gomosaic@latest
 ```
 
 Преимущества:
 
 - Экономия времени: автоматизация рутинных задач.
-- Типизация: минимизация ошибок благодаря типизированным запросам и ответам.
-- Гибкость: возможность кастомизации и конфигураций.
+- Типизация: меньше ошибок благодаря типизированным запросам и ответам.
+- Гибкость: плагины и стратегии настраиваются.
 
-## HTTP Binder — хелперы сборки параметров HTTP-запроса
+## HTTP Binder: хелперы сборки параметров HTTP-запроса
 
-Плагин генерирует метод `Bind(r *http.Request) error` для  извлечения параметров в структуру.
+Плагин генерирует метод `Bind(r *http.Request) error` для извлечения параметров в структуру.
 
 ### Аннотации структуры
 
@@ -60,8 +63,8 @@ go install github.com/go-mosaic/gomosaic/cmd/gomosaic@latest
 |-----------|----------|----------------------|
 | `@http-source query\|path\|header\|cookie\|form\|file` | Источник параметра | `query` |
 | `@http-name <имя>` | Имя HTTP-параметра (если отличается от имени поля) | Имя Go-поля |
-| `@http-default <значение>` | Значение по умолчанию | — |
-| `@http-required` | Параметр обязателен | — |
+| `@http-default <значение>` | Значение по умолчанию | - |
+| `@http-required` | Параметр обязателен | - |
 
 ### Источники параметров
 

@@ -6,17 +6,21 @@ jobs:
     runs-on: ubuntu-latest
     steps:
 
-    - name: Set up Go 1.23
+    - name: Set up Go 1.27
       uses: actions/setup-go@v5
       with:
-        go-version: 1.23
+        go-version: '1.27'
       id: go
 
     - name: Check out code into the Go module directory
       uses: actions/checkout@v4
 
     - name: Install golangci-lint
-      run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.64.5
+      run: curl -sfL https://raw.githubusercontent.com/golangci/golangci-lint/HEAD/install.sh | sh -s -- -b $(go env GOPATH)/bin v2.13.2
 
     - name: Run golangci-lint
+      run: $(go env GOPATH)/bin/golangci-lint run
+
+    - name: Run golangci-lint (v2)
+      working-directory: v2
       run: $(go env GOPATH)/bin/golangci-lint run

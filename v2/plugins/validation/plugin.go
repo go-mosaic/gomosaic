@@ -2,14 +2,14 @@
 //
 // Поддерживаемые аннотации:
 //
-//	@validate required         — обязательное поле
-//	@validate min=N            — минимальное значение (числа)
-//	@validate max=N            — максимальное значение (числа)
-//	@validate min-len=N        — минимальная длина строки
-//	@validate max-len=N        — максимальная длина строки
-//	@validate pattern=regex    — регулярное выражение
-//	@validate email            — валидный email
-//	@validate url              — валидный URL
+//	@validate required: обязательное поле
+//	@validate min=N: минимальное значение (числа)
+//	@validate max=N: максимальное значение (числа)
+//	@validate min-len=N: минимальная длина строки
+//	@validate max-len=N: максимальная длина строки
+//	@validate pattern=regex: регулярное выражение
+//	@validate email: валидный email
+//	@validate url: валидный URL
 //
 // Пример:
 //
@@ -53,19 +53,19 @@ type Rule struct {
 	IsURL    bool
 }
 
-// FieldRules — правила для конкретного поля.
+// FieldRules хранит правила для конкретного поля.
 type FieldRules struct {
 	Var  *gomosaic.VarInfo
 	Rule Rule
 }
 
-// StructRules — правила для структуры.
+// StructRules хранит правила для структуры.
 type StructRules struct {
 	NameTypeInfo *gomosaic.NameTypeInfo
 	Fields       []*FieldRules
 }
 
-// Plugin — плагин генерации валидации.
+// Plugin генерирует валидацию.
 type Plugin struct{}
 
 // NewPlugin создает новый экземпляр плагина.
@@ -173,22 +173,22 @@ func (g *generator) generateStruct(st *StructRules) jen.Code {
 			}
 
 			if fr.Rule.IsEmail && fr.Var.Type.IsBasic && fr.Var.Type.BasicInfo == gomosaic.IsString {
-				g.genPatternCheck(body, fieldPath, fieldName, `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`, "невалидный email")
+				g.genPatternCheck(body, fieldPath, fieldName, `^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`, "invalid email")
 			}
 
 			if fr.Rule.IsURL && fr.Var.Type.IsBasic && fr.Var.Type.BasicInfo == gomosaic.IsString {
-				g.genPatternCheck(body, fieldPath, fieldName, `^https?://`, "невалидный URL")
+				g.genPatternCheck(body, fieldPath, fieldName, `^https?://`, "invalid URL")
 			}
 
 			if fr.Rule.Pattern != "" && fr.Var.Type.IsBasic && fr.Var.Type.BasicInfo == gomosaic.IsString {
-				g.genPatternCheck(body, fieldPath, fieldName, fr.Rule.Pattern, "не соответствует шаблону")
+				g.genPatternCheck(body, fieldPath, fieldName, fr.Rule.Pattern, "does not match the pattern")
 			}
 
 			if fr.Rule.MinLen != nil && fr.Var.Type.IsBasic && fr.Var.Type.BasicInfo == gomosaic.IsString {
 				body.If(jen.Len(fieldPath.Clone()).Op("<").Lit(*fr.Rule.MinLen)).Block(
 					jen.Id(errVar).Op("=").Qual("github.com/hashicorp/go-multierror", "Append").Call(
 						jen.Id(errVar),
-						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: минимальная длина %d", fieldName, *fr.Rule.MinLen))),
+						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: minimum length is %d", fieldName, *fr.Rule.MinLen))),
 					),
 				)
 			}
@@ -197,7 +197,7 @@ func (g *generator) generateStruct(st *StructRules) jen.Code {
 				body.If(jen.Len(fieldPath.Clone()).Op(">").Lit(*fr.Rule.MaxLen)).Block(
 					jen.Id(errVar).Op("=").Qual("github.com/hashicorp/go-multierror", "Append").Call(
 						jen.Id(errVar),
-						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: максимальная длина %d", fieldName, *fr.Rule.MaxLen))),
+						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: maximum length is %d", fieldName, *fr.Rule.MaxLen))),
 					),
 				)
 			}
@@ -206,7 +206,7 @@ func (g *generator) generateStruct(st *StructRules) jen.Code {
 				body.If(fieldPath.Clone().Op("<").Lit(int(*fr.Rule.Min))).Block(
 					jen.Id(errVar).Op("=").Qual("github.com/hashicorp/go-multierror", "Append").Call(
 						jen.Id(errVar),
-						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: минимум %d", fieldName, *fr.Rule.Min))),
+						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: minimum is %d", fieldName, *fr.Rule.Min))),
 					),
 				)
 			}
@@ -215,7 +215,7 @@ func (g *generator) generateStruct(st *StructRules) jen.Code {
 				body.If(fieldPath.Clone().Op(">").Lit(int(*fr.Rule.Max))).Block(
 					jen.Id(errVar).Op("=").Qual("github.com/hashicorp/go-multierror", "Append").Call(
 						jen.Id(errVar),
-						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: максимум %d", fieldName, *fr.Rule.Max))),
+						jen.Qual("fmt", "Errorf").Call(jen.Lit(fmt.Sprintf("%s: maximum is %d", fieldName, *fr.Rule.Max))),
 					),
 				)
 			}
@@ -232,16 +232,17 @@ func (g *generator) genRequiredCheck(body *jen.Group, fieldPath *jen.Statement, 
 		switch t.BasicInfo {
 		case gomosaic.IsString:
 			body.If(fieldPath.Clone().Op("==").Lit("")).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit(fieldName + ": обязательное поле"))),
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit(fieldName + ": field is required"))),
 			)
 		case gomosaic.IsInteger, gomosaic.IsFloat:
 			body.If(fieldPath.Clone().Op("==").Lit(0)).Block(
-				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit(fieldName + ": обязательное поле"))),
+				jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit(fieldName + ": field is required"))),
 			)
+		default:
 		}
 	} else if t.IsPtr || t.IsSlice || t.IsMap {
 		body.If(fieldPath.Clone().Op("==").Nil()).Block(
-			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit(fieldName + ": обязательное поле"))),
+			jen.Return(jen.Qual("fmt", "Errorf").Call(jen.Lit(fieldName + ": field is required"))),
 		)
 	}
 }
@@ -261,6 +262,6 @@ func isNumericType(t *gomosaic.TypeInfo) bool {
 	return false
 }
 
-// Ensure compilation
+// Проверки на этапе компиляции.
 var _ = multierror.Append
 var _ gomosaic.Generator = (*Plugin)(nil)

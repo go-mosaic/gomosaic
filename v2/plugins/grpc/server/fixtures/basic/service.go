@@ -13,7 +13,7 @@ type UserService interface {
 }
 
 type GetUserRequest struct {
-	Id int
+	Id int //nolint:staticcheck // имя поля совпадает с protobuf-генерацией
 }
 
 type User struct {
@@ -26,7 +26,9 @@ type ListUsersRequest struct {
 	Filter   string
 }
 
-// UserService_ListUsersServer — заглушка gRPC серверного стрима.
+// UserService_ListUsersServer: заглушка gRPC серверного стрима.
+//
+//nolint:staticcheck // имя соответствует protobuf-генерации gRPC-стрима
 type UserService_ListUsersServer interface {
 	Send(*User) error
 }

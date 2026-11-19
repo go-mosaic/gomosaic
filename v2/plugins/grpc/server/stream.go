@@ -32,13 +32,14 @@ func (g *generator) generateStreamMethod(serviceName string, svc *ServiceOpt, m 
 			}
 		}
 	}).Error().BlockFunc(func(body *jen.Group) {
-		if svc.ProtoPackage != "" && m.MethodType == ServerStream {
-			body.Add(g.generateServerStreamWrapper(serviceName, svc, m))
-		} else if svc.ProtoPackage != "" && m.MethodType == ClientStream {
-			body.Add(g.generateClientStreamWrapper(serviceName, svc, m))
-		} else if svc.ProtoPackage != "" && m.MethodType == BidiStream {
-			body.Add(g.generateBidiStreamWrapper(serviceName, svc, m))
-		} else {
+		switch {
+		case svc.ProtoPackage != "" && m.MethodType == ServerStream:
+			body.Add(g.generateServerStreamWrapper(serviceName, m))
+		case svc.ProtoPackage != "" && m.MethodType == ClientStream:
+			body.Add(g.generateClientStreamWrapper(serviceName, m))
+		case svc.ProtoPackage != "" && m.MethodType == BidiStream:
+			body.Add(g.generateBidiStreamWrapper(serviceName, m))
+		default:
 			callArgs := make([]jen.Code, 0)
 			for _, p := range params {
 				callArgs = append(callArgs, jen.Id(p.Name))
@@ -51,7 +52,7 @@ func (g *generator) generateStreamMethod(serviceName string, svc *ServiceOpt, m 
 }
 
 // generateServerStreamWrapper генерирует обёртку для серверного стриминга.
-func (g *generator) generateServerStreamWrapper(serviceName string, svc *ServiceOpt, m *MethodOpt) jen.Code {
+func (g *generator) generateServerStreamWrapper(serviceName string, m *MethodOpt) jen.Code {
 	methodName := m.Func.Name
 	params := m.Func.Params
 
@@ -95,7 +96,7 @@ func (g *generator) generateServerStreamWrapper(serviceName string, svc *Service
 }
 
 // generateClientStreamWrapper генерирует обёртку для клиентского стриминга.
-func (g *generator) generateClientStreamWrapper(serviceName string, svc *ServiceOpt, m *MethodOpt) jen.Code {
+func (g *generator) generateClientStreamWrapper(serviceName string, m *MethodOpt) jen.Code {
 	methodName := m.Func.Name
 	params := m.Func.Params
 
@@ -139,7 +140,7 @@ func (g *generator) generateClientStreamWrapper(serviceName string, svc *Service
 }
 
 // generateBidiStreamWrapper генерирует обёртку для двунаправленного стриминга.
-func (g *generator) generateBidiStreamWrapper(serviceName string, svc *ServiceOpt, m *MethodOpt) jen.Code {
+func (g *generator) generateBidiStreamWrapper(serviceName string, m *MethodOpt) jen.Code {
 	methodName := m.Func.Name
 	params := m.Func.Params
 

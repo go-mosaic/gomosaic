@@ -14,6 +14,7 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/option"
 )
 
+// Источники параметров HTTP-запроса.
 const (
 	SourceQuery  = "query"
 	SourcePath   = "path"
@@ -25,6 +26,7 @@ const (
 
 const defaultFormMaxMemory = 32 << 20 // 32 MB
 
+// StructOpt описывает структуру с аннотациями @http-* для связывания параметров.
 type StructOpt struct {
 	NameTypeInfo  *gomosaic.NameTypeInfo
 	FormMaxMemory int `option:"form-max-memory"`
@@ -33,6 +35,7 @@ type StructOpt struct {
 	hasFormFields bool
 }
 
+// FieldOpt описывает поле структуры с параметрами связывания.
 type FieldOpt struct {
 	Source   string `option:"source"`
 	Name     string `option:"name"`
@@ -43,6 +46,7 @@ type FieldOpt struct {
 	NameOverride string
 }
 
+// Load разбирает структуры с аннотациями @http-* в опции связывания.
 func Load(module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (structs []*StructOpt, errs error) {
 	for _, nameTypeInfo := range types {
 		if nameTypeInfo.Type.Struct == nil {

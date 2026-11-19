@@ -17,13 +17,13 @@ func (g *generator) generateConversionFunctions(svc *ServiceOpt) jen.Code {
 	for _, m := range svc.Methods {
 		for _, p := range m.Func.Params {
 			if !p.IsContext && !isStreamType(p) {
-				g.collectTypes(p.Type, typeMap, svc)
+				g.collectTypes(p.Type, typeMap)
 			}
 		}
 
 		for _, r := range m.Func.Results {
 			if !r.IsError {
-				g.collectTypes(r.Type, typeMap, svc)
+				g.collectTypes(r.Type, typeMap)
 			}
 		}
 	}
@@ -39,10 +39,11 @@ func (g *generator) generateConversionFunctions(svc *ServiceOpt) jen.Code {
 		typeInfo := typeMap[typeName]
 		dtoType, hasDTO := g.allTypes[typeName]
 
-		if hasDTO && dtoType.Type.Struct != nil {
+		switch {
+		case hasDTO && dtoType.Type.Struct != nil:
 			group.Add(g.generateStructConversionFunctions(svc, typeName, dtoType))
-		} else if typeInfo.IsBasic {
-		} else {
+		case typeInfo.IsBasic:
+		default:
 			group.Add(g.generateStubConversionFunctions(svc, typeName))
 		}
 	}
@@ -51,13 +52,13 @@ func (g *generator) generateConversionFunctions(svc *ServiceOpt) jen.Code {
 }
 
 // collectTypes собирает уникальные именованные типы, требующие функций конвертации.
-func (g *generator) collectTypes(t *gomosaic.TypeInfo, typeMap map[string]*gomosaic.TypeInfo, svc *ServiceOpt) {
+func (g *generator) collectTypes(t *gomosaic.TypeInfo, typeMap map[string]*gomosaic.TypeInfo) {
 	if t == nil {
 		return
 	}
 
 	if t.IsPtr && t.ElemType != nil {
-		g.collectTypes(t.ElemType, typeMap, svc)
+		g.collectTypes(t.ElemType, typeMap)
 		return
 	}
 
@@ -67,10 +68,10 @@ func (g *generator) collectTypes(t *gomosaic.TypeInfo, typeMap map[string]*gomos
 
 	if t.Package == "" {
 		if t.ElemType != nil {
-			g.collectTypes(t.ElemType, typeMap, svc)
+			g.collectTypes(t.ElemType, typeMap)
 		}
 		if t.KeyType != nil {
-			g.collectTypes(t.KeyType, typeMap, svc)
+			g.collectTypes(t.KeyType, typeMap)
 		}
 		return
 	}
@@ -85,10 +86,10 @@ func (g *generator) collectTypes(t *gomosaic.TypeInfo, typeMap map[string]*gomos
 	}
 
 	if t.ElemType != nil {
-		g.collectTypes(t.ElemType, typeMap, svc)
+		g.collectTypes(t.ElemType, typeMap)
 	}
 	if t.KeyType != nil {
-		g.collectTypes(t.KeyType, typeMap, svc)
+		g.collectTypes(t.KeyType, typeMap)
 	}
 }
 
@@ -119,7 +120,7 @@ func (g *generator) generateStructConversionFunctions(svc *ServiceOpt, typeName 
 								continue
 							}
 							protoField := jen.Id("proto").Dot(field.Name)
-							dict[jen.Id(field.Name)] = g.generateFieldFromProto(field.Type, protoField, svc)
+							dict[jen.Id(field.Name)] = g.generateFieldFromProto(field.Type, protoField)
 						}
 					}),
 				),
@@ -152,7 +153,7 @@ func (g *generator) generateStructConversionFunctions(svc *ServiceOpt, typeName 
 }
 
 // generateFieldFromProto генерирует код конвертации поля из proto в DTO.
-func (g *generator) generateFieldFromProto(fieldType *gomosaic.TypeInfo, protoField jen.Code, svc *ServiceOpt) jen.Code {
+func (g *generator) generateFieldFromProto(fieldType *gomosaic.TypeInfo, protoField jen.Code) jen.Code {
 	actualType := fieldType
 	for actualType.IsPtr && actualType.ElemType != nil {
 		actualType = actualType.ElemType
@@ -167,7 +168,7 @@ func (g *generator) generateFieldFromProto(fieldType *gomosaic.TypeInfo, protoFi
 
 		baseName := getBaseTypeName(elemType)
 
-		return g.generateSliceFromProto(baseName, elemType, protoField, svc)
+		return g.generateSliceFromProto(baseName, protoField)
 
 	case actualType.IsMap && actualType.ElemType != nil:
 		elemType := actualType.ElemType
@@ -176,7 +177,7 @@ func (g *generator) generateFieldFromProto(fieldType *gomosaic.TypeInfo, protoFi
 		}
 
 		baseName := getBaseTypeName(elemType)
-		return g.generateMapFromProto(baseName, elemType, protoField, svc)
+		return g.generateMapFromProto(baseName, protoField)
 
 	case actualType.IsBasic:
 		return protoField
@@ -215,7 +216,7 @@ func (g *generator) generateFieldToProto(fieldType *gomosaic.TypeInfo, dtoField 
 			return jen.Append(jen.Index().Add(jenutils.TypeInfoQual(elemType, g.qual)).Values(), jen.Id("dto").Op("..."))
 		}
 		baseName := getBaseTypeName(elemType)
-		return g.generateSliceToProto(baseName, elemType, dtoField, svc)
+		return g.generateSliceToProto(baseName, dtoField, svc)
 
 	case actualType.IsMap && actualType.ElemType != nil:
 		elemType := actualType.ElemType
@@ -223,7 +224,7 @@ func (g *generator) generateFieldToProto(fieldType *gomosaic.TypeInfo, dtoField 
 			return dtoField
 		}
 		baseName := getBaseTypeName(elemType)
-		return g.generateMapToProto(baseName, elemType, dtoField, svc)
+		return g.generateMapToProto(baseName, dtoField, svc)
 
 	case actualType.IsBasic:
 		return dtoField
@@ -250,7 +251,7 @@ func (g *generator) generateFieldToProto(fieldType *gomosaic.TypeInfo, dtoField 
 }
 
 // generateSliceFromProto генерирует inline-конвертацию слайса из proto в DTO.
-func (g *generator) generateSliceFromProto(elemBaseName string, elemType *gomosaic.TypeInfo, protoField jen.Code, svc *ServiceOpt) jen.Code {
+func (g *generator) generateSliceFromProto(elemBaseName string, protoField jen.Code) jen.Code {
 	dtoQual := g.getDTOQual(elemBaseName)
 	return jen.Func().Params().Params(jen.Index().Add(dtoQual)).BlockFunc(func(body *jen.Group) {
 		body.Id("result").Op(":=").Make(jen.Index().Add(dtoQual), jen.Len(protoField))
@@ -262,7 +263,7 @@ func (g *generator) generateSliceFromProto(elemBaseName string, elemType *gomosa
 }
 
 // generateSliceToProto генерирует inline-конвертацию слайса из DTO в proto.
-func (g *generator) generateSliceToProto(elemBaseName string, elemType *gomosaic.TypeInfo, dtoField jen.Code, svc *ServiceOpt) jen.Code {
+func (g *generator) generateSliceToProto(elemBaseName string, dtoField jen.Code, svc *ServiceOpt) jen.Code {
 	return jen.Func().Params().Params(jen.Index().Qual(svc.ProtoPackage, elemBaseName)).BlockFunc(func(body *jen.Group) {
 		body.Id("result").Op(":=").Make(jen.Index().Qual(svc.ProtoPackage, elemBaseName), jen.Len(dtoField))
 		body.For(jen.List(jen.Id("i"), jen.Id("item")).Op(":=").Range().Add(dtoField)).Block(
@@ -273,7 +274,7 @@ func (g *generator) generateSliceToProto(elemBaseName string, elemType *gomosaic
 }
 
 // generateMapFromProto генерирует inline-конвертацию map из proto в DTO.
-func (g *generator) generateMapFromProto(elemBaseName string, elemType *gomosaic.TypeInfo, protoField jen.Code, svc *ServiceOpt) jen.Code {
+func (g *generator) generateMapFromProto(elemBaseName string, protoField jen.Code) jen.Code {
 	dtoQual := g.getDTOQual(elemBaseName)
 	return jen.Func().Params().Params(jen.Map(jen.String()).Add(dtoQual)).BlockFunc(func(body *jen.Group) {
 		body.Id("result").Op(":=").Make(jen.Map(jen.String()).Add(dtoQual), jen.Len(protoField))
@@ -285,7 +286,7 @@ func (g *generator) generateMapFromProto(elemBaseName string, elemType *gomosaic
 }
 
 // generateMapToProto генерирует inline-конвертацию map из DTO в proto.
-func (g *generator) generateMapToProto(elemBaseName string, elemType *gomosaic.TypeInfo, dtoField jen.Code, svc *ServiceOpt) jen.Code {
+func (g *generator) generateMapToProto(elemBaseName string, dtoField jen.Code, svc *ServiceOpt) jen.Code {
 	return jen.Func().Params().Params(jen.Map(jen.String()).Qual(svc.ProtoPackage, elemBaseName)).BlockFunc(func(body *jen.Group) {
 		body.Id("result").Op(":=").Make(jen.Map(jen.String()).Qual(svc.ProtoPackage, elemBaseName), jen.Len(dtoField))
 		body.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Add(dtoField)).Block(

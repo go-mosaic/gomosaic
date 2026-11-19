@@ -6,6 +6,7 @@ import (
 	"sort"
 )
 
+// ContextKey задаёт тип ключей контекста генератора.
 type ContextKey string
 
 const (
@@ -13,30 +14,36 @@ const (
 	transformRegistryContextKey ContextKey = "transform_registry"
 )
 
+// TransformRegistryFromContext достаёт реестр трансформеров из контекста.
 func TransformRegistryFromContext(ctx context.Context) *TransformRegistry {
 	reg, _ := ctx.Value(transformRegistryContextKey).(*TransformRegistry)
 	return reg
 }
 
+// ContextWithOutputDir кладёт директорию вывода в контекст.
 func ContextWithOutputDir(ctx context.Context, outputDir string) context.Context {
 	return context.WithValue(ctx, outputDirContextKey, outputDir)
 }
 
+// OutputDirFromContext возвращает директорию вывода из контекста.
 func OutputDirFromContext(ctx context.Context) string {
 	return ctx.Value(outputDirContextKey).(string)
 }
 
+// Generator описывает интерфейс плагина-генератора кода.
 type Generator interface {
 	Name() string
 	Generate(ctx context.Context, module *ModuleInfo, types []*NameTypeInfo) (map[string]File, error)
 }
 
+// CodeGenerator запускает плагин и сохраняет результат в файловую систему.
 type CodeGenerator struct {
 	pluginRegistry    *PluginRegistry
 	transformRegistry *TransformRegistry
 	fs                FileSystem
 }
 
+// NewCodeGenerator создаёт CodeGenerator на готовых реестрах и файловой системе.
 func NewCodeGenerator(pluginReg *PluginRegistry, transformReg *TransformRegistry, fs FileSystem) *CodeGenerator {
 	return &CodeGenerator{
 		pluginRegistry:    pluginReg,
@@ -45,6 +52,7 @@ func NewCodeGenerator(pluginReg *PluginRegistry, transformReg *TransformRegistry
 	}
 }
 
+// Generate запускает плагин pluginName и сохраняет сгенерированные файлы.
 func (cg *CodeGenerator) Generate(ctx context.Context, module *ModuleInfo, types []*NameTypeInfo, pluginName string) (outputFiles []string, err error) {
 	p, err := cg.pluginRegistry.Get(pluginName)
 	if err != nil {

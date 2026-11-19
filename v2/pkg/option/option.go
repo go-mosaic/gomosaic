@@ -1,3 +1,4 @@
+// Package option заполняет структуры опций значениями из аннотаций.
 package option
 
 import (
@@ -42,7 +43,7 @@ func unmarshalStruct(v reflect.Value, t reflect.Type, ann *gomosaic.AnnotationIn
 
 		tp := parseTag(tag)
 
-		// Для inline-полей — обрабатываем аннотацию на вложенной структуре
+		// Для inline-полей обрабатываем аннотацию на вложенной структуре
 		if tp.inline && tp.name == "" {
 			fv := v.Field(i)
 			if fv.Kind() == reflect.Pointer {
@@ -167,11 +168,12 @@ func setFieldValue(field reflect.Value, ann *gomosaic.AnnotationInfo, tp tagPart
 
 	switch field.Kind() {
 	case reflect.String:
-		if tp.asFlag {
+		switch {
+		case tp.asFlag:
 			field.SetString("true")
-		} else if tp.fromValue && len(ann.Params) > 0 {
+		case tp.fromValue && len(ann.Params) > 0:
 			field.SetString(ann.Params[0])
-		} else if len(ann.Params) > 0 {
+		case len(ann.Params) > 0:
 			field.SetString(strings.Join(ann.Params, " "))
 		}
 	case reflect.Bool:
@@ -213,6 +215,7 @@ func setFieldValue(field reflect.Value, ann *gomosaic.AnnotationInfo, tp tagPart
 		if tp.inline {
 			return unmarshalStruct(field, field.Type(), ann, "")
 		}
+	default:
 	}
 	return nil
 }

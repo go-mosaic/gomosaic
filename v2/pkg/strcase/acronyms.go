@@ -38,6 +38,7 @@ var uppercaseAcronym = map[string]string{
 	"CLI":   "cli",
 }
 
+// AddAcronym добавляет акроним в словарь; паникует, если он уже есть.
 func AddAcronym(acronym, v string) {
 	if _, ok := uppercaseAcronym[acronym]; ok {
 		panic("acronym exists: " + acronym)

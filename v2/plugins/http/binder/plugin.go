@@ -8,18 +8,22 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 )
 
+// Plugin генерирует хелперы связывания параметров.
 type Plugin struct {
 	strategy Strategy
 }
 
+// NewPlugin создаёт плагин для указанной стратегии.
 func NewPlugin(strategy Strategy) *Plugin {
 	return &Plugin{strategy: strategy}
 }
 
+// Name реализует gomosaic.Generator.
 func (p *Plugin) Name() string {
 	return p.strategy.Name()
 }
 
+// Generate реализует gomosaic.Generator.
 func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (map[string]gomosaic.File, error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 

@@ -1,7 +1,7 @@
 // Package golden предоставляет утилиты для тестирования сгенерированного кода
 // с использованием эталонов.
 //
-// эталон-файлы хранятся в testdata/ относительно тестируемого пакета.
+// эталон-файлы хранятся в fixtures/ относительно тестируемого пакета.
 // Для обновления эталонов необходимо использовать флаг -update:
 //
 //	go test ./... -update
@@ -21,6 +21,13 @@ import (
 
 var update = flag.Bool("update", false, "обновить golden-файлы")
 
+const (
+	dirMode      = 0o755
+	fileMode     = 0o600
+	maxDiffLines = 20
+)
+
+// AssertBytes сравнивает сгенерированные байты с эталоном name.
 func AssertBytes(t *testing.T, generated []byte, name string) {
 	t.Helper()
 
@@ -28,11 +35,11 @@ func AssertBytes(t *testing.T, generated []byte, name string) {
 
 	if *update {
 		dir := filepath.Dir(goldenPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, dirMode); err != nil {
 			t.Fatalf("не удалось создать директорию: %v", err)
 		}
 
-		if err := os.WriteFile(goldenPath, generated, 0o644); err != nil {
+		if err := os.WriteFile(goldenPath, generated, fileMode); err != nil {
 			t.Fatalf("не удалось записать golden-файл: %v", err)
 		}
 
@@ -52,6 +59,7 @@ func AssertBytes(t *testing.T, generated []byte, name string) {
 	}
 }
 
+// AssertFile рендерит GoFile и сравнивает результат с эталоном name.
 func AssertFile(t *testing.T, f *gomosaic.GoFile, name string) {
 	t.Helper()
 
@@ -67,11 +75,11 @@ func AssertFile(t *testing.T, f *gomosaic.GoFile, name string) {
 
 	if *update {
 		dir := filepath.Dir(goldenPath)
-		if err := os.MkdirAll(dir, 0o755); err != nil {
+		if err := os.MkdirAll(dir, dirMode); err != nil {
 			t.Fatalf("не удалось создать директорию: %v", err)
 		}
 
-		if err := os.WriteFile(goldenPath, generated, 0o644); err != nil {
+		if err := os.WriteFile(goldenPath, generated, fileMode); err != nil {
 			t.Fatalf("не удалось записать golden-файл: %v", err)
 		}
 
@@ -91,6 +99,7 @@ func AssertFile(t *testing.T, f *gomosaic.GoFile, name string) {
 	}
 }
 
+// ParseAndGenerate загружает модуль и разбирает типы из goFile.
 func ParseAndGenerate(t *testing.T, dir, goFile string) (*gomosaic.ModuleInfo, []*gomosaic.NameTypeInfo) {
 	t.Helper()
 
@@ -159,7 +168,7 @@ func simpleDiff(expected, actual string) string {
 		}
 
 		if expLine != actLine {
-			if diffs < 20 {
+			if diffs < maxDiffLines {
 				fmt.Fprintf(&diff, "  line %d:\n", i+1)
 
 				if expLine != "" {
@@ -175,8 +184,8 @@ func simpleDiff(expected, actual string) string {
 		}
 	}
 
-	if diffs > 20 {
-		fmt.Fprintf(&diff, "  ... и ещё %d отличий\n", diffs-20)
+	if diffs > maxDiffLines {
+		fmt.Fprintf(&diff, "  ... и ещё %d отличий\n", diffs-maxDiffLines)
 	}
 
 	return diff.String()

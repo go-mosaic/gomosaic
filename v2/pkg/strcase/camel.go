@@ -1,10 +1,11 @@
+// Package strcase переводит строки между стилями именования: CamelCase,
+// snake_case, kebab-case и их вариантами в верхнем регистре.
 package strcase
 
 import (
 	"strings"
 )
 
-// Converts a string to CamelCase
 func toCamelInitCase(s string, initCase bool) string {
 	s = strings.TrimSpace(s)
 	if s == "" {
@@ -45,12 +46,12 @@ func toCamelInitCase(s string, initCase bool) string {
 	return n.String()
 }
 
-// ToCamel converts a string to CamelCase
+// ToCamel переводит s в CamelCase с учётом акронимов.
 func ToCamel(s string) string {
 	return toCamelInitCase(s, true)
 }
 
-// ToLowerCamel converts a string to lowerCamelCase
+// ToLowerCamel переводит s в lowerCamelCase с учётом акронимов.
 func ToLowerCamel(s string) string {
 	return toCamelInitCase(s, false)
 }

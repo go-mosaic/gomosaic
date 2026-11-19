@@ -5,11 +5,13 @@ import (
 	"strings"
 )
 
+// PkgPathNormalizer приводит пути пакетов к виду, пригодному для генерации.
 type PkgPathNormalizer struct {
 	modInfo   *ModuleInfo
 	outputDir string
 }
 
+// NewPkgPathNormalizer создаёт нормализатор для модуля и директории вывода.
 func NewPkgPathNormalizer(modInfo *ModuleInfo, outputDir string) *PkgPathNormalizer {
 	return &PkgPathNormalizer{
 		modInfo:   modInfo,

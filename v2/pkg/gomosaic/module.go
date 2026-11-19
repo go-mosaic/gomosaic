@@ -11,6 +11,7 @@ import (
 	"golang.org/x/mod/modfile"
 )
 
+// ModuleInfo описывает Go-модуль: директорию, путь и версию Go.
 type ModuleInfo struct {
 	Dir       string
 	Path      string

@@ -11,13 +11,16 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/annotation"
 )
 
+// PackageInfo описывает пакет: имя и import path.
 type PackageInfo struct {
 	Name string
 	Path string
 }
 
+// BasicKind задаёт вид базового типа.
 type BasicKind int
 
+// Виды базовых типов; значения соответствуют go/types.BasicKind.
 const (
 	Invalid BasicKind = iota
 
@@ -52,8 +55,10 @@ const (
 	Rune = Int32
 )
 
+// BasicInfo хранит битовые признаки базового типа.
 type BasicInfo int
 
+// Признаки базовых типов; значения соответствуют go/types.BasicInfo.
 const (
 	IsBoolean BasicInfo = 1 << iota
 	IsInteger
@@ -68,6 +73,7 @@ const (
 	IsConstType = IsBoolean | IsNumeric | IsString
 )
 
+// TypeInfo описывает тип: базовый, составной или именованный.
 type TypeInfo struct {
 	Name           string
 	Package        string
@@ -160,13 +166,16 @@ func (t *TypeInfo) String() string {
 	return result.String()
 }
 
+// AnnotationInfo хранит аннотацию и её позицию в исходнике.
 type AnnotationInfo struct {
 	*annotation.Annotation
 	Position *PosInfo
 }
 
+// Annotations хранит набор аннотаций.
 type Annotations []*AnnotationInfo
 
+// GetSlice возвращает все аннотации с ключом key.
 func (ts *Annotations) GetSlice(key string) (annotations []*AnnotationInfo) {
 	for _, a := range *ts {
 		if a.Key == key {
@@ -176,6 +185,7 @@ func (ts *Annotations) GetSlice(key string) (annotations []*AnnotationInfo) {
 	return
 }
 
+// Get возвращает первую аннотацию с ключом key.
 func (ts *Annotations) Get(key string) (*AnnotationInfo, bool) {
 	for _, a := range *ts {
 		if a.Key == key {
@@ -185,6 +195,7 @@ func (ts *Annotations) Get(key string) (*AnnotationInfo, bool) {
 	return nil, false
 }
 
+// Has сообщает, есть ли аннотация с ключом key.
 func (ts *Annotations) Has(key string) bool {
 	_, ok := ts.Get(key)
 	return ok
@@ -275,6 +286,7 @@ type VarInfo struct {
 // ValueKind описывает вид значения.
 type ValueKind int
 
+// Возможные значения ValueKind.
 const (
 	UnknownValueKind ValueKind = iota
 	BoolValueKind

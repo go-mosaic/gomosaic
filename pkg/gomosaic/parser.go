@@ -125,7 +125,8 @@ func (t *TypeInfo) String() string {
 	}
 
 	if t.Package != "" {
-		result.WriteString(t.Package + ".")
+		result.WriteString(t.Package)
+		result.WriteString(".")
 	}
 	result.WriteString(t.Name)
 
@@ -579,7 +580,6 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 			typeArgs := make([]*TypeInfo, 0, t.TypeArgs().Len())
 
 			for typeArg := range t.TypeArgs().Types() {
-
 				argInfo, err := typeToTypeInfo(pkg, typeArg)
 				if err != nil {
 					return nil, err
@@ -653,7 +653,6 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 			typeParams = make([]*TypeInfo, 0, t.TypeParams().Len())
 
 			for typeParam := range t.TypeParams().TypeParams() {
-
 				paramInfo, err := typeToTypeInfo(pkg, typeParam)
 				if err != nil {
 					return nil, err
@@ -686,7 +685,6 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 
 		if constraint := t.Constraint(); constraint != nil {
 			constraintInfo, err := typeToTypeInfo(pkg, constraint)
-
 			if err != nil {
 				return nil, err
 			}
@@ -701,7 +699,6 @@ func typeToTypeInfo(pkg *packages.Package, t types.Type) (*TypeInfo, error) {
 
 		for term := range t.Terms() {
 			termInfo, err := typeToTypeInfo(pkg, term.Type())
-
 			if err != nil {
 				return nil, err
 			}

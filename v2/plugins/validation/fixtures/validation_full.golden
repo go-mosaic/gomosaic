@@ -12,22 +12,22 @@ import (
 func (v *User) Validate() error {
 	var errs error
 	if v.Name == "" {
-		return fmt.Errorf("Name: обязательное поле")
+		return fmt.Errorf("Name: field is required")
 	}
 	if v.Email == "" {
-		return fmt.Errorf("Email: обязательное поле")
+		return fmt.Errorf("Email: field is required")
 	}
 	if !regexp.MustCompile("^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\\.[a-zA-Z]{2,}$").MatchString(v.Email) {
-		return fmt.Errorf("Email: невалидный email")
+		return fmt.Errorf("Email: invalid email")
 	}
 	if v.Age == 0 {
-		return fmt.Errorf("Age: обязательное поле")
+		return fmt.Errorf("Age: field is required")
 	}
 	if !regexp.MustCompile("^https?://").MatchString(v.Website) {
-		return fmt.Errorf("Website: невалидный URL")
+		return fmt.Errorf("Website: invalid URL")
 	}
 	if v.Password == "" {
-		return fmt.Errorf("Password: обязательное поле")
+		return fmt.Errorf("Password: field is required")
 	}
 	return errs
 }

@@ -2,6 +2,7 @@ package binder
 
 import (
 	"fmt"
+	"strconv"
 
 	"github.com/dave/jennifer/jen"
 
@@ -261,14 +262,12 @@ func (g *generator) genDefaultAssign(recvName, fieldName string, fo *FieldOpt) j
 }
 
 func defaultInt(s string) int {
-	var n int
-	fmt.Sscanf(s, "%d", &n)
+	n, _ := strconv.Atoi(s)
 	return n
 }
 
 func defaultFloat(s string) float64 {
-	var f float64
-	fmt.Sscanf(s, "%f", &f)
+	f, _ := strconv.ParseFloat(s, 64)
 	return f
 }
 

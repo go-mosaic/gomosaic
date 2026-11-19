@@ -2,7 +2,7 @@ package gomosaic
 
 import "fmt"
 
-// PluginRegistry — реестр плагинов.
+// PluginRegistry хранит плагины по имени.
 type PluginRegistry struct {
 	plugins map[string]Generator
 }

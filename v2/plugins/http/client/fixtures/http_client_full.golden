@@ -19,8 +19,10 @@ import (
 	propagation "go.opentelemetry.io/otel/propagation"
 	trace "go.opentelemetry.io/otel/trace"
 	"io"
+	"mime/multipart"
 	"net"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 )
@@ -193,19 +195,40 @@ type User struct {
 	Name  string
 	Email string
 }
+type Filter struct {
+	Title       string   `json:"title"`
+	Statuses    []string `json:"statuses"`
+	Priority    string   `json:"priority"`
+	Labels      []string `json:"labels"`
+	TargetUsers []string `json:"targetUsers"`
+	PerPage     int      `json:"perPage"`
+	Page        int      `json:"page"`
+}
 
 const serviceScopeName = "service"
 
+const serviceCreateNoteShortName = "(service.UserService).CreateNote"
+const serviceCreateNoteFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).CreateNote"
 const serviceCreateUserShortName = "(service.UserService).CreateUser"
 const serviceCreateUserFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).CreateUser"
 const serviceDeleteUserShortName = "(service.UserService).DeleteUser"
 const serviceDeleteUserFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).DeleteUser"
+const serviceGetFeedShortName = "(service.UserService).GetFeed"
+const serviceGetFeedFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).GetFeed"
+const serviceGetRawShortName = "(service.UserService).GetRaw"
+const serviceGetRawFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).GetRaw"
 const serviceGetUserShortName = "(service.UserService).GetUser"
 const serviceGetUserFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).GetUser"
+const serviceListTasksShortName = "(service.UserService).ListTasks"
+const serviceListTasksFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).ListTasks"
 const serviceListUsersShortName = "(service.UserService).ListUsers"
 const serviceListUsersFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).ListUsers"
 const serviceSearchUsersShortName = "(service.UserService).SearchUsers"
 const serviceSearchUsersFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).SearchUsers"
+const serviceSubmitFormShortName = "(service.UserService).SubmitForm"
+const serviceSubmitFormFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).SubmitForm"
+const serviceUploadShortName = "(service.UserService).Upload"
+const serviceUploadFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).Upload"
 
 type UserServiceClient struct {
 	target string
@@ -221,6 +244,131 @@ func NewUserServiceClient(target string, opts ...ClientOption) *UserServiceClien
 		o(&c.opts)
 	}
 	return c
+}
+
+type UserServiceCreateNoteRequest struct {
+	c     *UserServiceClient
+	opts  clientOptions
+	title string
+	body  string
+}
+
+func (r *UserServiceCreateNoteRequest) SetTitle(v string) *UserServiceCreateNoteRequest {
+	r.title = v
+	return r
+}
+func (r *UserServiceCreateNoteRequest) SetBody(v string) *UserServiceCreateNoteRequest {
+	r.body = v
+	return r
+}
+func (r *UserServiceCreateNoteRequest) makeBodyRequest() interface{} {
+	return struct {
+		Data struct {
+			Title string `json:"title,omitempty"`
+			Body  string `json:"body,omitempty"`
+		} `json:"data"`
+	}{Data: {
+		Body:  r.body,
+		Title: r.title,
+	}}
+}
+func (r *UserServiceCreateNoteRequest) Execute(opts ...ClientOption) error {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceCreateNoteShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/note"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceCreateNoteFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceCreateNoteShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "POST", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	switch r.opts.content {
+	default:
+		req.Header.Add("Content-Type", "application/json")
+		var reqData bytes.Buffer
+		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
+			if r.opts.tracer != nil {
+				span.AddEvent("JSON encode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+				span.SetStatus(codes.Error, "failed sent request")
+			}
+			return err
+		}
+		req.Body = io.NopCloser(&reqData)
+	}
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return nil
+}
+func (r *UserServiceClient) CreateNoteRequest(title string, body string) *UserServiceCreateNoteRequest {
+	m := &UserServiceCreateNoteRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	m.SetTitle(title)
+	m.SetBody(body)
+	return m
+}
+func (r *UserServiceClient) CreateNote(ctx context.Context, title string, body string) error {
+	err := r.CreateNoteRequest(title, body).Execute(WithContext(ctx))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 type UserServiceCreateUserRequest struct {
@@ -263,16 +411,19 @@ func (r *UserServiceCreateUserRequest) Execute(opts ...ClientOption) (string, *U
 	if r.opts.propagator != nil {
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
-	req.Header.Add("Content-Type", "application/json")
-	var reqData bytes.Buffer
-	if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
-		if r.opts.tracer != nil {
-			span.AddEvent("JSON encode error", trace.WithAttributes(attribute.String("reason", err.Error())))
-			span.SetStatus(codes.Error, "failed sent request")
+	switch r.opts.content {
+	default:
+		req.Header.Add("Content-Type", "application/json")
+		var reqData bytes.Buffer
+		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
+			if r.opts.tracer != nil {
+				span.AddEvent("JSON encode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+				span.SetStatus(codes.Error, "failed sent request")
+			}
+			return nil, err
 		}
-		return nil, err
+		req.Body = io.NopCloser(&reqData)
 	}
-	req.Body = io.NopCloser(&reqData)
 	before := append(r.c.opts.before, r.opts.before...)
 	for _, before := range before {
 		ctx, err = before(ctx, req)
@@ -446,6 +597,222 @@ func (r *UserServiceClient) DeleteUser(ctx context.Context, id int) error {
 	return nil
 }
 
+type UserServiceGetFeedRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+}
+
+func (r *UserServiceGetFeedRequest) Execute(opts ...ClientOption) ([]User, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceGetFeedShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/feed"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceGetFeedFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceGetFeedShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	q := req.URL.Query()
+	q.Set("perpage", "10")
+	q["status"] = []string{"active", "pending"}
+	req.URL.RawQuery = q.Encode()
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return nil, r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return nil, errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	var reader io.ReadCloser
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+	} else {
+		reader = resp.Body
+	}
+	var respBody struct {
+		Users []User `json:"users"`
+	}
+	if err = json.NewDecoder(reader).Decode(&respBody); err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("JSON decode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed read response")
+		}
+		return nil, err
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return respBody.Users, nil
+}
+func (r *UserServiceClient) GetFeedRequest() *UserServiceGetFeedRequest {
+	m := &UserServiceGetFeedRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	return m
+}
+func (r *UserServiceClient) GetFeed(ctx context.Context) ([]User, error) {
+	users, err := r.GetFeedRequest().Execute(WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
+}
+
+type UserServiceGetRawRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+}
+
+func (r *UserServiceGetRawRequest) Execute(opts ...ClientOption) ([]byte, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceGetRawShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/raw"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceGetRawFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceGetRawShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return nil, r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return nil, errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	var reader io.ReadCloser
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+	} else {
+		reader = resp.Body
+	}
+	respBody, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, err
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return respBody, nil
+}
+func (r *UserServiceClient) GetRawRequest() *UserServiceGetRawRequest {
+	m := &UserServiceGetRawRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	return m
+}
+func (r *UserServiceClient) GetRaw(ctx context.Context) ([]byte, error) {
+	data, err := r.GetRawRequest().Execute(WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	return data, nil
+}
+
 type UserServiceGetUserRequest struct {
 	c    *UserServiceClient
 	opts clientOptions
@@ -557,6 +924,139 @@ func (r *UserServiceClient) GetUser(ctx context.Context, id int) (*User, error) 
 	}
 
 	return user, nil
+}
+
+type UserServiceListTasksRequest struct {
+	c      *UserServiceClient
+	opts   clientOptions
+	filter Filter
+}
+
+func (r *UserServiceListTasksRequest) SetFilter(v Filter) *UserServiceListTasksRequest {
+	r.filter = v
+	return r
+}
+func (r *UserServiceListTasksRequest) Execute(opts ...ClientOption) ([]User, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceListTasksShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/tasks"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceListTasksFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceListTasksShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	q := req.URL.Query()
+	q.Set("title", r.filter.Title)
+	q["statuses"] = make([]string, len(r.filter.Statuses))
+	for i, val := range r.filter.Statuses {
+		q["statuses"][i] = val
+	}
+	q.Set("priority", r.filter.Priority)
+	q["labels"] = make([]string, len(r.filter.Labels))
+	for i, val := range r.filter.Labels {
+		q["labels"][i] = val
+	}
+	q["targetUsers"] = make([]string, len(r.filter.TargetUsers))
+	for i, val := range r.filter.TargetUsers {
+		q["targetUsers"][i] = val
+	}
+	q.Set("perPage", strconv.FormatInt(int64(r.filter.PerPage), 10))
+	q.Set("page", strconv.FormatInt(int64(r.filter.Page), 10))
+	req.URL.RawQuery = q.Encode()
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return nil, err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return nil, r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return nil, errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	var reader io.ReadCloser
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, err
+		}
+		defer reader.Close()
+	} else {
+		reader = resp.Body
+	}
+	var respBody struct {
+		Users []User `json:"users"`
+	}
+	if err = json.NewDecoder(reader).Decode(&respBody); err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("JSON decode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed read response")
+		}
+		return nil, err
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return respBody.Users, nil
+}
+func (r *UserServiceClient) ListTasksRequest(filter Filter) *UserServiceListTasksRequest {
+	m := &UserServiceListTasksRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	m.SetFilter(filter)
+	return m
+}
+func (r *UserServiceClient) ListTasks(ctx context.Context, filter Filter) ([]User, error) {
+	users, err := r.ListTasksRequest(filter).Execute(WithContext(ctx))
+	if err != nil {
+		return nil, err
+	}
+
+	return users, nil
 }
 
 type UserServiceListUsersRequest struct {
@@ -716,10 +1216,10 @@ func (r *UserServiceSearchUsersRequest) Execute(opts ...ClientOption) ([]User, i
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
 	q := req.URL.Query()
-	q.Set("query", fmt.Sprintf("%v", r.query))
-	q.Set("limit_val", fmt.Sprintf("%v", r.limit))
+	q.Set("query", r.query)
+	q.Set("limit_val", strconv.FormatInt(int64(r.limit), 10))
 	req.URL.RawQuery = q.Encode()
-	req.Header.Set("X-Offset", fmt.Sprintf("%v", r.offset))
+	req.Header.Set("X-Offset", strconv.FormatInt(int64(r.offset), 10))
 	before := append(r.c.opts.before, r.opts.before...)
 	for _, before := range before {
 		ctx, err = before(ctx, req)
@@ -799,4 +1299,255 @@ func (r *UserServiceClient) SearchUsers(ctx context.Context, query string, limit
 	}
 
 	return users, total, nil
+}
+
+type UserServiceSubmitFormRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+	name string
+	age  int
+}
+
+func (r *UserServiceSubmitFormRequest) SetName(v string) *UserServiceSubmitFormRequest {
+	r.name = v
+	return r
+}
+func (r *UserServiceSubmitFormRequest) SetAge(v int) *UserServiceSubmitFormRequest {
+	r.age = v
+	return r
+}
+func (r *UserServiceSubmitFormRequest) makeBodyRequest() interface{} {
+	return struct {
+		Name string `json:"name,omitempty"`
+		Age  int    `json:"age,omitempty"`
+	}{
+		Age:  r.age,
+		Name: r.name,
+	}
+}
+func (r *UserServiceSubmitFormRequest) Execute(opts ...ClientOption) error {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceSubmitFormShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/form"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceSubmitFormFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceSubmitFormShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "POST", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	switch r.opts.content {
+	default:
+		req.Header.Add("Content-Type", "application/json")
+		var reqData bytes.Buffer
+		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
+			if r.opts.tracer != nil {
+				span.AddEvent("JSON encode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+				span.SetStatus(codes.Error, "failed sent request")
+			}
+			return err
+		}
+		req.Body = io.NopCloser(&reqData)
+	case "application/x-www-form-urlencoded":
+		req.Header.Add("Content-Type", "application/x-www-form-urlencoded")
+		form := url.Values{}
+		form.Set("name", r.name)
+		form.Set("age", strconv.FormatInt(int64(r.age), 10))
+		req.Body = io.NopCloser(strings.NewReader(form.Encode()))
+	}
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return nil
+}
+func (r *UserServiceClient) SubmitFormRequest(name string, age int) *UserServiceSubmitFormRequest {
+	m := &UserServiceSubmitFormRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	m.SetName(name)
+	m.SetAge(age)
+	return m
+}
+func (r *UserServiceClient) SubmitForm(ctx context.Context, name string, age int) error {
+	err := r.SubmitFormRequest(name, age).Execute(WithContext(ctx))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+type UserServiceUploadRequest struct {
+	c        *UserServiceClient
+	opts     clientOptions
+	filename string
+}
+
+func (r *UserServiceUploadRequest) SetFilename(v string) *UserServiceUploadRequest {
+	r.filename = v
+	return r
+}
+func (r *UserServiceUploadRequest) makeBodyRequest() interface{} {
+	return struct {
+		Filename string `json:"filename,omitempty"`
+	}{Filename: r.filename}
+}
+func (r *UserServiceUploadRequest) Execute(opts ...ClientOption) error {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceUploadShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/upload"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceUploadFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceUploadShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "POST", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	switch r.opts.content {
+	default:
+		req.Header.Add("Content-Type", "application/json")
+		var reqData bytes.Buffer
+		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
+			if r.opts.tracer != nil {
+				span.AddEvent("JSON encode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+				span.SetStatus(codes.Error, "failed sent request")
+			}
+			return err
+		}
+		req.Body = io.NopCloser(&reqData)
+	case "multipart/form-data":
+		req.Header.Add("Content-Type", "multipart/form-data")
+		var formData bytes.Buffer
+		multipartWriter := multipart.NewWriter(&formData)
+		if err = multipartWriter.WriteField("filename", r.filename); err != nil {
+			return err
+		}
+		multipartWriter.Close()
+		req.Body = io.NopCloser(&formData)
+	}
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return nil
+}
+func (r *UserServiceClient) UploadRequest(filename string) *UserServiceUploadRequest {
+	m := &UserServiceUploadRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	m.SetFilename(filename)
+	return m
+}
+func (r *UserServiceClient) Upload(ctx context.Context, filename string) error {
+	err := r.UploadRequest(filename).Execute(WithContext(ctx))
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

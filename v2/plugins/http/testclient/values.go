@@ -7,6 +7,14 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/jenutils"
 )
 
+const (
+	randomNumberDigits = 5
+	loremWords         = 10
+	randomFloatDigits  = 2
+	randomFloatDecimal = 1
+	randomFloatMax     = 100
+)
+
 // typeToValue генерирует тестовое значение через faker.
 func (g *generator) typeToValue(typeInfo *gomosaic.TypeInfo) jen.Code {
 	var isPtr bool
@@ -54,7 +62,7 @@ func (g *generator) typeToValue(typeInfo *gomosaic.TypeInfo) jen.Code {
 	case typeInfo.Interface != nil:
 		return jen.Nil()
 	}
-	return jen.Qual(FakerPkg, "New").Call().Dot("Lorem").Call().Dot("Sentence").Call(jen.Lit(10))
+	return jen.Qual(FakerPkg, "New").Call().Dot("Lorem").Call().Dot("Sentence").Call(jen.Lit(loremWords))
 }
 
 func (g *generator) basicTypeToValue(typeInfo *gomosaic.TypeInfo) jen.Code {
@@ -71,11 +79,11 @@ func (g *generator) basicTypeToRawValue(typeInfo *gomosaic.TypeInfo) jen.Code {
 	case gomosaic.IsBoolean:
 		return jen.Lit(true)
 	case gomosaic.IsInteger, gomosaic.IsInteger | gomosaic.IsUnsigned:
-		return jen.Qual(FakerPkg, "New").Call().Dot("RandomNumber").Call(jen.Lit(5))
+		return jen.Qual(FakerPkg, "New").Call().Dot("RandomNumber").Call(jen.Lit(randomNumberDigits))
 	case gomosaic.IsFloat:
-		return jen.Qual(FakerPkg, "New").Call().Dot("Float64").Call(jen.Lit(2), jen.Lit(1), jen.Lit(100))
+		return jen.Qual(FakerPkg, "New").Call().Dot("Float64").Call(jen.Lit(randomFloatDigits), jen.Lit(randomFloatDecimal), jen.Lit(randomFloatMax))
 	default:
-		return jen.Qual(FakerPkg, "New").Call().Dot("Lorem").Call().Dot("Sentence").Call(jen.Lit(10))
+		return jen.Qual(FakerPkg, "New").Call().Dot("Lorem").Call().Dot("Sentence").Call(jen.Lit(loremWords))
 	}
 }
 
