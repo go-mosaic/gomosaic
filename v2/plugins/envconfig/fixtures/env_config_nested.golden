@@ -13,7 +13,7 @@ import (
 func (c *Config) LoadFromEnv() error {
 	val, ok := os.LookupEnv("HOST")
 	if !ok {
-		return fmt.Errorf("переменная окружения HOST не установлена")
+		return fmt.Errorf("environment variable HOST is not set")
 	}
 	c.Host = val
 	val, ok := os.LookupEnv("PORT")
@@ -21,12 +21,12 @@ func (c *Config) LoadFromEnv() error {
 		val = "8080"
 	}
 	if err := runtime.ParseInt(val, 10, 64, &c.Port); err != nil {
-		return fmt.Errorf("переменная окружения PORT: %w", err)
+		return fmt.Errorf("environment variable PORT: %w", err)
 	}
 	val, ok := os.LookupEnv("DEBUG")
 	if ok {
 		if err := runtime.ParseBool(val, &c.Debug); err != nil {
-			return fmt.Errorf("переменная окружения DEBUG: %w", err)
+			return fmt.Errorf("environment variable DEBUG: %w", err)
 		}
 	}
 	val, ok := os.LookupEnv("TIMEOUT")
@@ -34,7 +34,7 @@ func (c *Config) LoadFromEnv() error {
 		val = "30s"
 	}
 	if err := runtime.ParseDuration(val, &c.Timeout); err != nil {
-		return fmt.Errorf("переменная окружения TIMEOUT: %w", err)
+		return fmt.Errorf("environment variable TIMEOUT: %w", err)
 	}
 	if err := c.Database.LoadFromEnv(); err != nil {
 		return fmt.Errorf("database: %w", err)

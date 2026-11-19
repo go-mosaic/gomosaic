@@ -51,7 +51,7 @@ type BodyFn func(group *jen.Group, m *gomosaic.MethodInfo)
 
 // Config содержит конфигурацию middleware-плагина.
 type Config struct {
-	// Name — уникальное имя плагина (например, "log-middleware").
+	// Name: уникальное имя плагина (например, "log-middleware").
 	Name string
 
 	// MiddlewareName имя middleware (например, "Log", "Metric"),
@@ -71,10 +71,12 @@ type Config struct {
 	OutputFile string
 }
 
+// Plugin генерирует method-level middleware.
 type Plugin struct {
 	cfg Config
 }
 
+// NewPlugin создаёт плагин с заданной конфигурацией.
 func NewPlugin(cfg Config) *Plugin {
 	if cfg.OutputFile == "" {
 		cfg.OutputFile = cfg.Name + "_gen.go"
@@ -82,8 +84,10 @@ func NewPlugin(cfg Config) *Plugin {
 	return &Plugin{cfg: cfg}
 }
 
+// Name реализует gomosaic.Generator.
 func (p *Plugin) Name() string { return p.cfg.Name }
 
+// Generate реализует gomosaic.Generator.
 func (p *Plugin) Generate(
 	ctx context.Context,
 	module *gomosaic.ModuleInfo,
@@ -146,6 +150,7 @@ func (p *Plugin) loadAnnotations(module *gomosaic.ModuleInfo, types []*gomosaic.
 	return services, nil
 }
 
+// Generator генерирует код middleware для сервиса.
 type Generator struct {
 	nameTypeInfo  *gomosaic.NameTypeInfo
 	structName    string
@@ -155,6 +160,7 @@ type Generator struct {
 	qualFunc      gomosaic.QualFunc
 }
 
+// Generate собирает объявления структуры, конструктора и методов middleware.
 func (g *Generator) Generate() (jen.Code, error) {
 	group := jen.NewFile("")
 
@@ -203,6 +209,7 @@ func (g *Generator) Generate() (jen.Code, error) {
 	return group, nil
 }
 
+// GenerateMethod добавляет метод middleware, оборачивающий вызов next.
 func (g *Generator) GenerateMethod(m *gomosaic.MethodInfo, beforeNextBodyFn, afterNextBodyFn BodyFn) {
 	resultList := jen.Null()
 

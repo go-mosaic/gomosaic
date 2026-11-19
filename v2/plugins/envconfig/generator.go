@@ -10,14 +10,18 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 )
 
+// Plugin генерирует загрузку конфигурации из переменных окружения.
 type Plugin struct{}
 
+// NewPlugin создаёт плагин env-config.
 func NewPlugin() *Plugin {
 	return &Plugin{}
 }
 
+// Name реализует gomosaic.Generator.
 func (p *Plugin) Name() string { return "env-config" }
 
+// Generate реализует gomosaic.Generator.
 func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (files map[string]gomosaic.File, errs error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 
@@ -39,11 +43,13 @@ func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, type
 	return map[string]gomosaic.File{"env_config_gen.go": f}, nil
 }
 
+// Generator генерирует методы LoadFromEnv для структур конфигурации.
 type Generator struct {
 	qual              gomosaic.QualFunc
 	transformRegistry *gomosaic.TransformRegistry
 }
 
+// GenerateStruct генерирует метод LoadFromEnv для структуры st.
 func (g *Generator) GenerateStruct(st *StructOpt) jen.Code {
 	group := jen.NewFile("")
 	structVar := "c"
@@ -66,7 +72,7 @@ func (g *Generator) generateFieldLoaders(body *jen.Group, structVar string, fiel
 		}
 
 		if len(f.Children) > 0 {
-			g.generateStructLoader(body, structVar, f, envName)
+			g.generateStructLoader(body, structVar, f)
 			continue
 		}
 
@@ -85,7 +91,7 @@ func (g *Generator) generateFieldLoader(body *jen.Group, structVar string, f *Fi
 	case f.Required && f.Default == "":
 		body.If(jen.Op("!").Id("ok")).Block(
 			jen.Return(jen.Qual("fmt", "Errorf").Call(
-				jen.Lit("переменная окружения " + envName + " не установлена"),
+				jen.Lit("environment variable " + envName + " is not set"),
 			)),
 		)
 		g.generateAssignment(body, fieldPath, goType, "val", envName)
@@ -111,7 +117,7 @@ func (g *Generator) generateAssignment(body *jen.Group, fieldPath *jen.Statement
 		SetQualFunc(g.qual).
 		SetErrStatements(
 			jen.Return(jen.Qual("fmt", "Errorf").Call(
-				jen.Lit("переменная окружения "+envName+": %w"),
+				jen.Lit("environment variable "+envName+": %w"),
 				jen.Err(),
 			)),
 		)
@@ -129,7 +135,7 @@ func (g *Generator) generateValidation(body *jen.Group, fieldPath *jen.Statement
 	if f.MaxLen > 0 {
 		body.If(jen.Len(fieldPath.Clone()).Op(">").Lit(f.MaxLen)).Block(
 			jen.Return(jen.Qual("fmt", "Errorf").Call(
-				jen.Lit(fmt.Sprintf("переменная окружения %s: максимальная длина %d", envName, f.MaxLen)),
+				jen.Lit(fmt.Sprintf("environment variable %s: maximum length is %d", envName, f.MaxLen)),
 			)),
 		)
 	}
@@ -137,14 +143,14 @@ func (g *Generator) generateValidation(body *jen.Group, fieldPath *jen.Statement
 	if f.MinLen > 0 {
 		body.If(jen.Len(fieldPath.Clone()).Op("<").Lit(f.MinLen)).Block(
 			jen.Return(jen.Qual("fmt", "Errorf").Call(
-				jen.Lit(fmt.Sprintf("переменная окружения %s: минимальная длина %d", envName, f.MinLen)),
+				jen.Lit(fmt.Sprintf("environment variable %s: minimum length is %d", envName, f.MinLen)),
 			)),
 		)
 	}
 }
 
 // generateStructLoader генерирует загрузку вложенной структуры.
-func (g *Generator) generateStructLoader(body *jen.Group, structVar string, f *FieldOpt, envName string) {
+func (g *Generator) generateStructLoader(body *jen.Group, structVar string, f *FieldOpt) {
 	fieldPath := jen.Id(structVar).Dot(f.Var.Name)
 
 	isPtr := f.Var.Type.IsPtr

@@ -13,6 +13,12 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/annotation"
 )
 
+const (
+	structFieldsCapacity    = 64
+	returnValuesMapCapacity = 128
+)
+
+// ParsePackage разбирает пакеты по путям и возвращает типы с аннотацией @gomosaic.
 func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, err error) {
 	patterns := make([]string, len(paths))
 	for i := range paths {
@@ -31,7 +37,7 @@ func ParsePackage(dir string, paths []string) (nameTypesInfo []*NameTypeInfo, er
 	}
 
 	for _, pkg := range pkgs {
-		if len(pkg.Errors) > 0 {
+		if pkg.Types == nil || pkg.Types.Scope() == nil {
 			continue
 		}
 
@@ -324,7 +330,7 @@ func typeToTypeInfoVisited(pkg *packages.Package, t types.Type, visited map[*typ
 
 		if t.Obj().Type() != nil {
 			if visited != nil && visited[t] {
-				// Уже посещали этот тип — пропускаем для предотвращения цикла
+				// Уже посещали этот тип, пропускаем для предотвращения цикла
 				break
 			}
 			if visited != nil {
@@ -341,7 +347,7 @@ func typeToTypeInfoVisited(pkg *packages.Package, t types.Type, visited map[*typ
 	case *types.Struct:
 		typeInfo.Name = "struct"
 		structInfo := &StructInfo{
-			Fields: make([]*VarInfo, 0, 64),
+			Fields: make([]*VarInfo, 0, structFieldsCapacity),
 		}
 
 		for i := range t.NumFields() {
@@ -450,7 +456,7 @@ func typeToTypeInfoVisited(pkg *packages.Package, t types.Type, visited map[*typ
 }
 
 func parseReturnValues(pkg *packages.Package, files []*ast.File) map[string][]*TypeAndValueInfo {
-	returnValues := make(map[string][]*TypeAndValueInfo, 128)
+	returnValues := make(map[string][]*TypeAndValueInfo, returnValuesMapCapacity)
 
 	for _, file := range files {
 		ast.Inspect(file, func(n ast.Node) bool {
@@ -589,6 +595,7 @@ func isError(typeInfo *TypeInfo) bool {
 	return typeInfo.Name == "error" && typeInfo.Package == ""
 }
 
+// ParseAnnotations разбирает аннотации из комментариев.
 func ParseAnnotations(comments []*CommentInfo) (annotations Annotations, err error) {
 	for _, comment := range comments {
 		if !comment.IsAnnotation {

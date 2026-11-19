@@ -8,19 +8,23 @@ import (
 	"path/filepath"
 )
 
+// File представляет сгенерированный файл.
 type File interface {
 	Render(w io.Writer, version string) error
 }
 
+// FileSystem сохраняет сгенерированные файлы.
 type FileSystem interface {
 	SaveFile(filename string, file File) (path string, err error)
 }
 
+// DiskFileSystem пишет файлы на диск в outputDir.
 type DiskFileSystem struct {
 	version   string
 	outputDir string
 }
 
+// NewFileSystem создаёт файловую систему, пишущую файлы в outputDir.
 func NewFileSystem(version, outputDir string) *DiskFileSystem {
 	return &DiskFileSystem{
 		version:   version,
@@ -28,6 +32,7 @@ func NewFileSystem(version, outputDir string) *DiskFileSystem {
 	}
 }
 
+// SaveFile реализует FileSystem.
 func (fs *DiskFileSystem) SaveFile(filename string, file File) (path string, err error) {
 	path = filepath.Join(fs.outputDir, filename)
 
@@ -45,11 +50,13 @@ func (fs *DiskFileSystem) SaveFile(filename string, file File) (path string, err
 	return path, nil
 }
 
+// MemoryFileSystem хранит файлы в памяти. Удобна в тестах.
 type MemoryFileSystem struct {
 	version string
 	files   map[string][]byte
 }
 
+// NewMemoryFileSystem создаёт файловую систему в памяти.
 func NewMemoryFileSystem(version string) *MemoryFileSystem {
 	return &MemoryFileSystem{
 		version: version,
@@ -57,6 +64,7 @@ func NewMemoryFileSystem(version string) *MemoryFileSystem {
 	}
 }
 
+// SaveFile реализует FileSystem.
 func (fs *MemoryFileSystem) SaveFile(filename string, file File) (path string, err error) {
 	var buf bytes.Buffer
 
@@ -69,11 +77,13 @@ func (fs *MemoryFileSystem) SaveFile(filename string, file File) (path string, e
 	return filename, nil
 }
 
+// File возвращает содержимое файла и признак наличия.
 func (fs *MemoryFileSystem) File(filename string) ([]byte, bool) {
 	data, ok := fs.files[filename]
 	return data, ok
 }
 
+// Files возвращает все сохранённые файлы.
 func (fs *MemoryFileSystem) Files() map[string][]byte {
 	return fs.files
 }

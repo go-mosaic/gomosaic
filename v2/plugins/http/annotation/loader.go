@@ -33,7 +33,7 @@ type IfaceOpt struct {
 	Methods      []*MethodOpt
 }
 
-// DefaultOpt — опции по умолчанию.
+// DefaultOpt хранит опции по умолчанию.
 type DefaultOpt struct {
 	ContentType string `option:"content-type"`
 	Accept      string `option:"accept"`
@@ -50,6 +50,9 @@ type MethodOpt struct {
 	Single        SingleOpt     `option:"single"`
 	Use           UseOpt        `option:"use"`
 	Default       DefaultOpt    `option:"default"`
+
+	// Query хранит фиксированные query-параметры клиента (@http-query-value).
+	Query QueryOpt
 
 	// ClientSkip исключает метод из генерации HTTP-клиента (http-client,
 	// http-client-test).
@@ -88,6 +91,17 @@ type SingleOpt struct {
 type UseOpt struct {
 	Multipart  bool `option:"multipart"`
 	URLEncoded bool `option:"url-encoded"`
+}
+
+// QueryOpt хранит фиксированные query-параметры клиента (@http-query-value).
+type QueryOpt struct {
+	Values []QueryValueOpt
+}
+
+// QueryValueOpt описывает фиксированный query-параметр: имя и его значения.
+type QueryValueOpt struct {
+	Name   string
+	Values []string
 }
 
 // MethodParamOpt содержит аннотации параметра метода.
@@ -154,6 +168,18 @@ func Load(module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (interfac
 			}
 			if methodOpt.WrapResp.Path != "" {
 				methodOpt.WrapResp.PathParts = strings.Split(methodOpt.WrapResp.Path, ".")
+			}
+
+			for _, ann := range m.Annotations.GetSlice("http-query-value") {
+				if len(ann.Params) == 0 {
+					errs = multierror.Append(errs, fmt.Errorf("@http-query-value требует имя параметра: %s", ann.Position))
+					continue
+				}
+
+				methodOpt.Query.Values = append(methodOpt.Query.Values, QueryValueOpt{
+					Name:   ann.Params[0],
+					Values: append([]string{}, ann.Params[1:]...),
+				})
 			}
 
 			if len(m.Params) == 0 || !m.Params[0].IsContext {

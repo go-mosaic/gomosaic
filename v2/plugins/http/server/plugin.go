@@ -11,7 +11,7 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
 )
 
-// Plugin — HTTP-серверный плагин v2.
+// Plugin генерирует HTTP-сервер.
 // Конфигурируется через Strategy (Chi, Echo, и т.д.).
 type Plugin struct {
 	strategy Strategy
@@ -54,5 +54,5 @@ func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, type
 	return map[string]gomosaic.File{filename: f}, errs
 }
 
-// Ensure Plugin implements gomosaic.Generator.
+// Гарантирует, что Plugin реализует gomosaic.Generator.
 var _ gomosaic.Generator = (*Plugin)(nil)

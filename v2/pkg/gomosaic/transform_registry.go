@@ -6,6 +6,12 @@ import (
 
 const runtimePkg = "github.com/go-mosaic/runtime"
 
+const (
+	strconvBase = 10
+	bitSize64   = 64
+	floatPrec   = 2
+)
+
 // DefaultTransformRegistry возвращает реестр со всеми встроенными трансформерами.
 func DefaultTransformRegistry() *TransformRegistry {
 	r := NewTransformRegistry()
@@ -73,7 +79,7 @@ func (i *intTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, err
 
 	return jen.If(jen.Err().Op(":=").Do(qualFn(runtimePkg, parseFunc)).Call(
 		valueID,
-		jen.Lit(10),
+		jen.Lit(strconvBase),
 		jen.Lit(typeInfo.BitSize),
 		jen.Op("&").Add(assignID),
 	), jen.Err().Op("!=").Nil()).Block(errorStatements...)
@@ -83,24 +89,25 @@ func (i *intTypeParse) Format(valueID jen.Code, typeInfo *TypeInfo, qualFn QualF
 	switch typeInfo.BasicInfo {
 	case IsInteger:
 		return jen.Qual("strconv", "FormatInt").CallFunc(func(g *jen.Group) {
-			if typeInfo.BitSize == 64 && typeInfo.BasicKind != Int {
+			if typeInfo.BitSize == bitSize64 && typeInfo.BasicKind != Int {
 				g.Add(valueID)
 			} else {
 				g.Id("int64").Call(valueID)
 			}
 
-			g.Lit(10)
+			g.Lit(strconvBase)
 		})
 	case IsInteger | IsUnsigned:
 		return jen.Qual("strconv", "FormatUint").CallFunc(func(g *jen.Group) {
-			if typeInfo.BitSize == 64 && typeInfo.BasicKind != Uint {
+			if typeInfo.BitSize == bitSize64 && typeInfo.BasicKind != Uint {
 				g.Add(valueID)
 			} else {
 				g.Id("uint64").Call(valueID)
 			}
 
-			g.Lit(10)
+			g.Lit(strconvBase)
 		})
+	default:
 	}
 
 	return jen.Null()
@@ -111,24 +118,22 @@ func (f *floatTypeParse) Support(typeInfo *TypeInfo) bool {
 }
 
 func (f *floatTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, errorStatements []jen.Code, qualFn QualFunc) jen.Code {
-	const runtimePkg = "github.com/go-mosaic/runtime"
-
 	return jen.If(
-		jen.Err().Op(":=").Do(qualFn(runtimePkg, "ParseFloat")).Call(valueID, jen.Lit(10), jen.Lit(typeInfo.BitSize), jen.Op("&").Add(assignID)),
+		jen.Err().Op(":=").Do(qualFn(runtimePkg, "ParseFloat")).Call(valueID, jen.Lit(strconvBase), jen.Lit(typeInfo.BitSize), jen.Op("&").Add(assignID)),
 		jen.Err().Op("!=").Nil(),
 	).Block(errorStatements...)
 }
 
 func (f *floatTypeParse) Format(valueID jen.Code, typeInfo *TypeInfo, qualFn QualFunc) jen.Code {
 	return jen.Qual("strconv", "FormatFloat").CallFunc(func(g *jen.Group) {
-		if typeInfo.BitSize == 64 {
+		if typeInfo.BitSize == bitSize64 {
 			g.Add(valueID)
 		} else {
 			g.Id("float64").Call(valueID)
 		}
 
 		g.LitRune('g')
-		g.Lit(2)
+		g.Lit(floatPrec)
 		g.Lit(typeInfo.BitSize)
 	})
 }
@@ -189,7 +194,7 @@ func (s *sliceTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, e
 	case IsString:
 		code = jen.Do(qualFn(runtimePkg, "Split")).Call(valueID, jen.Lit(";"), jen.Op("&").Add(assignID))
 	case IsNumeric:
-		code = jen.Do(qualFn(runtimePkg, "SplitInt")).Call(valueID, jen.Lit(";"), jen.Lit(10), jen.Lit(64), jen.Op("&").Add(assignID))
+		code = jen.Do(qualFn(runtimePkg, "SplitInt")).Call(valueID, jen.Lit(";"), jen.Lit(strconvBase), jen.Lit(bitSize64), jen.Op("&").Add(assignID))
 	default:
 		panic("unknown slice basic type")
 	}
@@ -200,11 +205,12 @@ func (s *sliceTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, e
 func (s *sliceTypeParse) Format(valueID jen.Code, typeInfo *TypeInfo, qualFn QualFunc) jen.Code {
 	switch typeInfo.BasicInfo {
 	case IsInteger:
-		return jen.Do(qualFn(runtimePkg, "JoinInt")).Call(valueID, jen.Lit(","), jen.Lit(10))
+		return jen.Do(qualFn(runtimePkg, "JoinInt")).Call(valueID, jen.Lit(","), jen.Lit(strconvBase))
 	case IsFloat:
-		return jen.Do(qualFn(runtimePkg, "JoinFloat")).Call(valueID, jen.Lit(","), jen.Lit('f'), jen.Lit(2), jen.Lit(64))
+		return jen.Do(qualFn(runtimePkg, "JoinFloat")).Call(valueID, jen.Lit(","), jen.Lit('f'), jen.Lit(floatPrec), jen.Lit(bitSize64))
 	case IsString:
 		return jen.Do(qualFn("strings", "Join")).Call(valueID, jen.Lit(","))
+	default:
 	}
 
 	return nil
@@ -219,11 +225,11 @@ func (m *mapTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, err
 
 	switch typeInfo.ElemType.BasicInfo {
 	case IsInteger:
-		code = jen.Qual(runtimePkg, "SplitKeyValInt").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(10), jen.Lit(64), jen.Op("&").Add(assignID))
+		code = jen.Qual(runtimePkg, "SplitKeyValInt").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(strconvBase), jen.Lit(bitSize64), jen.Op("&").Add(assignID))
 	case IsInteger | IsUnsigned:
-		code = jen.Qual(runtimePkg, "SplitKeyValUint").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(10), jen.Lit(64), jen.Op("&").Add(assignID))
+		code = jen.Qual(runtimePkg, "SplitKeyValUint").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(strconvBase), jen.Lit(bitSize64), jen.Op("&").Add(assignID))
 	case IsFloat:
-		code = jen.Qual(runtimePkg, "SplitKeyValFloat").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(64), jen.Op("&").Add(assignID))
+		code = jen.Qual(runtimePkg, "SplitKeyValFloat").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Lit(bitSize64), jen.Op("&").Add(assignID))
 	case IsString:
 		code = jen.Qual(runtimePkg, "SplitKeyValString").Call(valueID, jen.Lit(","), jen.Lit("="), jen.Op("&").Add(assignID))
 	case IsBoolean:
@@ -238,11 +244,12 @@ func (m *mapTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, err
 func (m *mapTypeParse) Format(valueID jen.Code, typeInfo *TypeInfo, qualFn QualFunc) jen.Code {
 	switch typeInfo.BasicInfo {
 	case IsInteger:
-		return jen.Do(qualFn(runtimePkg, "JoinKeyValInt")).Call(valueID, jen.Lit(";"), jen.Lit("="), jen.Lit(10))
+		return jen.Do(qualFn(runtimePkg, "JoinKeyValInt")).Call(valueID, jen.Lit(";"), jen.Lit("="), jen.Lit(strconvBase))
 	case IsFloat:
-		return jen.Do(qualFn(runtimePkg, "JoinKeyValFloat")).Call(valueID, jen.Lit(";"), jen.Lit("="), jen.Lit('f'), jen.Lit(2), jen.Lit(64))
+		return jen.Do(qualFn(runtimePkg, "JoinKeyValFloat")).Call(valueID, jen.Lit(";"), jen.Lit("="), jen.Lit('f'), jen.Lit(floatPrec), jen.Lit(bitSize64))
 	case IsString:
 		return jen.Do(qualFn(runtimePkg, "JoinKeyValString")).Call(valueID, jen.Lit(";"), jen.Lit("="))
+	default:
 	}
 
 	return nil

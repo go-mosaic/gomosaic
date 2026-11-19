@@ -34,7 +34,7 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
 )
 
-// Plugin — плагин генерации OpenAPI-документации.
+// Plugin генерирует OpenAPI-документацию.
 type Plugin struct{}
 
 // NewPlugin создает новый экземпляр плагина.
@@ -71,7 +71,6 @@ type generator struct {
 func (g *generator) generateSpec(services []*annotation.IfaceOpt) jen.Code {
 	group := jen.NewFile("")
 
-	// OpenAPI Handler
 	group.Func().Id("OpenAPIHandler").Params().Qual("net/http", "Handler").BlockFunc(func(body *jen.Group) {
 		body.Var().Id("spec").Op("=").Map(jen.String()).Interface().ValuesFunc(func(dict *jen.Group) {
 			dict.Add(jen.Lit("openapi")).Op(":").Add(jen.Lit("3.0.3"))
@@ -80,7 +79,7 @@ func (g *generator) generateSpec(services []*annotation.IfaceOpt) jen.Code {
 				jen.Lit("version"): jen.Lit("1.0.0"),
 			}))
 
-			// Paths
+			// Пути эндпоинтов.
 			for _, svc := range services {
 				for _, m := range svc.Methods {
 					pathItem := g.generatePathItem(svc, m)
@@ -132,7 +131,7 @@ func (g *generator) generatePathItem(svc *annotation.IfaceOpt, m *annotation.Met
 			jen.Lit("operationId"): jen.Lit(methodName),
 			jen.Lit("tags"):        jen.Index().String().Values(tags...),
 			jen.Lit("parameters"):  g.generateParameters(m),
-			jen.Lit("responses"):   g.generateResponses(m),
+			jen.Lit("responses"):   g.generateResponses(),
 		})
 	}))
 }
@@ -158,10 +157,10 @@ func (g *generator) generateParameters(m *annotation.MethodOpt) jen.Code {
 	return params
 }
 
-func (g *generator) generateResponses(m *annotation.MethodOpt) jen.Code {
+func (g *generator) generateResponses() jen.Code {
 	responses := jen.Map(jen.String()).Interface().Values(jen.Dict{
 		jen.Lit("200"): jen.Map(jen.String()).Interface().Values(jen.Dict{
-			jen.Lit("description"): jen.Lit("Успешный ответ"),
+			jen.Lit("description"): jen.Lit("Successful response"),
 		}),
 	})
 	return responses
@@ -190,6 +189,7 @@ func (g *generator) typeToSchema(t *gomosaic.TypeInfo) jen.Code {
 			return jen.Map(jen.String()).Interface().Values(jen.Dict{
 				jen.Lit("type"): jen.Lit("boolean"),
 			})
+		default:
 		}
 	}
 	return schema

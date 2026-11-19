@@ -4,8 +4,10 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
+// QualFunc возвращает функцию квалификации имени из пакета pkgPath.
 type QualFunc func(pkgPath, name string) func(s *jen.Statement)
 
+// Transformer объединяет Parser и Formatter.
 type Transformer interface {
 	Parser
 	Formatter
@@ -29,6 +31,7 @@ type TransformRegistry struct {
 	formatFactories []formatFactory
 }
 
+// NewTransformRegistry создаёт пустой реестр трансформеров.
 func NewTransformRegistry() *TransformRegistry {
 	return &TransformRegistry{}
 }

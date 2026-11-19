@@ -47,6 +47,9 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 )
 
+const minCodegenArgs = 3
+
+// Run запускает CLI с указанной версией и сборщиком.
 func Run(version string, builder *gomosaic.Builder) {
 	log.SetFlags(0)
 
@@ -57,6 +60,7 @@ func Run(version string, builder *gomosaic.Builder) {
 	cobra.CheckErr(cmd.Execute())
 }
 
+// CodegenCmd создаёт команду codegen.
 func CodegenCmd(version string, builder *gomosaic.Builder) *cobra.Command {
 	var (
 		modfile string
@@ -75,8 +79,8 @@ func CodegenCmd(version string, builder *gomosaic.Builder) *cobra.Command {
 				"  --modfile:  Путь к go.mod (опционально).",
 			),
 			Args: func(cmd *cobra.Command, args []string) error {
-				if len(args) < 3 {
-					return fmt.Errorf("требуется минимум 3 аргумента: name packages outputDir")
+				if len(args) < minCodegenArgs {
+					return fmt.Errorf("требуется минимум %d аргумента: name packages outputDir", minCodegenArgs)
 				}
 				return nil
 			},

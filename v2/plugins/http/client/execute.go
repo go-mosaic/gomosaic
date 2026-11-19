@@ -3,6 +3,7 @@ package client
 import (
 	"github.com/dave/jennifer/jen"
 
+	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 	"github.com/go-mosaic/gomosaic/v2/pkg/jenutils"
 	"github.com/go-mosaic/gomosaic/v2/pkg/strcase"
 	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
@@ -106,10 +107,10 @@ func (g *generator) genExecuteMethod(m *annotation.MethodOpt) jen.Code {
 		)
 
 		if len(m.BodyParams) > 0 {
-			g.genJSONReqContent(body, m)
+			g.genBodyContent(body, m)
 		}
 
-		if len(m.QueryParams) > 0 {
+		if len(m.QueryParams) > 0 || len(m.Query.Values) > 0 {
 			g.genQueryParams(body, m)
 		}
 
@@ -243,21 +244,155 @@ func (g *generator) genJSONReqContent(body *jen.Group, m *annotation.MethodOpt) 
 	body.Id("req").Dot("Body").Op("=").Qual("io", "NopCloser").Call(jen.Op("&").Id("reqData"))
 }
 
+// genBodyContent генерирует код заполнения тела запроса в зависимости от
+// выбранного Content-Type (JSON по умолчанию, опционально url-encoded и multipart).
+func (g *generator) genBodyContent(body *jen.Group, m *annotation.MethodOpt) {
+	body.Switch(jen.Id(recvNameReq).Dot("opts").Dot("content")).BlockFunc(func(sw *jen.Group) {
+		sw.Default().BlockFunc(func(b *jen.Group) {
+			g.genJSONReqContent(b, m)
+		})
+
+		if !annotation.IsObjectType(m.BodyParams[0].Var.Type) {
+			if m.Use.URLEncoded {
+				sw.Case(jen.Lit("application/x-www-form-urlencoded")).BlockFunc(func(b *jen.Group) {
+					g.genURLEncodedReqContent(b, m)
+				})
+			}
+
+			if m.Use.Multipart {
+				sw.Case(jen.Lit("multipart/form-data")).BlockFunc(func(b *jen.Group) {
+					g.genMultipartReqContent(b, m)
+				})
+			}
+		}
+	})
+}
+
+func (g *generator) genURLEncodedReqContent(body *jen.Group, m *annotation.MethodOpt) {
+	body.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("application/x-www-form-urlencoded"))
+	body.Id("form").Op(":=").Qual("net/url", "Values").Values()
+
+	for _, p := range m.BodyParams {
+		if p.Var.IsContext || !p.Var.Type.IsBasic {
+			continue
+		}
+
+		valueID := jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))
+		body.Id("form").Dot("Set").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, valueID))
+	}
+
+	body.Id("req").Dot("Body").Op("=").Qual("io", "NopCloser").Call(
+		jen.Qual("strings", "NewReader").Call(jen.Id("form").Dot("Encode").Call()),
+	)
+}
+
+func (g *generator) genMultipartReqContent(body *jen.Group, m *annotation.MethodOpt) {
+	body.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("multipart/form-data"))
+	body.Var().Id("formData").Qual("bytes", "Buffer")
+	body.Id("multipartWriter").Op(":=").Qual("mime/multipart", "NewWriter").Call(jen.Op("&").Id("formData"))
+
+	for _, p := range m.BodyParams {
+		if p.Var.IsContext || !p.Var.Type.IsBasic {
+			continue
+		}
+
+		valueID := jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))
+		body.If(
+			jen.Err().Op("=").Id("multipartWriter").Dot("WriteField").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, valueID)),
+			jen.Err().Op("!=").Nil(),
+		).Block(
+			jen.Return(annotation.MakeEmptyResults(m.BodyResults, g.qual, jen.Err())...),
+		)
+	}
+
+	body.Id("multipartWriter").Dot("Close").Call()
+	body.Id("req").Dot("Body").Op("=").Qual("io", "NopCloser").Call(jen.Op("&").Id("formData"))
+}
+
 func (g *generator) genQueryParams(body *jen.Group, m *annotation.MethodOpt) {
 	body.Id("q").Op(":=").Id("req").Dot("URL").Dot("Query").Call()
+
 	for _, p := range m.QueryParams {
-		body.Id("q").Dot("Set").Call(jen.Lit(p.Name), jen.Qual("fmt", "Sprintf").Call(
-			jen.Lit("%v"), jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name)),
-		))
+		paramName := strcase.ToLowerCamel(p.Var.Name)
+
+		if isStructParam(p.Var.Type) {
+			g.genQueryStructFields(body, p.Var.Type, paramName)
+			continue
+		}
+
+		body.Id("q").Dot("Set").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(paramName)))
 	}
+
+	for _, qv := range m.Query.Values {
+		switch len(qv.Values) {
+		case 0:
+			body.Id("q").Dot("Set").Call(jen.Lit(qv.Name), jen.Lit(""))
+		case 1:
+			body.Id("q").Dot("Set").Call(jen.Lit(qv.Name), jen.Lit(qv.Values[0]))
+		default:
+			body.Id("q").Index(jen.Lit(qv.Name)).Op("=").Index().String().ValuesFunc(func(values *jen.Group) {
+				for _, v := range qv.Values {
+					values.Lit(v)
+				}
+			})
+		}
+	}
+
 	body.Id("req").Dot("URL").Dot("RawQuery").Op("=").Id("q").Dot("Encode").Call()
+}
+
+// genQueryStructFields раскладывает query-параметр-структуру по полям
+// (имя ключа берётся из json-тега).
+func (g *generator) genQueryStructFields(body *jen.Group, t *gomosaic.TypeInfo, paramName string) {
+	for _, f := range t.ElemType.Struct.Fields {
+		key := jsonFieldName(f)
+		valueID := jen.Id(recvNameReq).Dot(paramName).Dot(f.Name)
+
+		if f.Type.IsSlice {
+			body.Id("q").Index(jen.Lit(key)).Op("=").Make(jen.Index().String(), jen.Len(valueID))
+			body.For(jen.List(jen.Id("i"), jen.Id("val")).Op(":=").Range().Add(valueID)).Block(
+				jen.Id("q").Index(jen.Lit(key)).Index(jen.Id("i")).Op("=").Add(g.formatValue(f.Type.ElemType, jen.Id("val"))),
+			)
+			continue
+		}
+
+		body.Id("q").Dot("Set").Call(jen.Lit(key), g.formatValue(f.Type, valueID))
+	}
+}
+
+// formatValue форматирует значение в строку через реестр трансформеров,
+// а при отсутствии подходящего трансформера — через fmt.Sprintf.
+func (g *generator) formatValue(t *gomosaic.TypeInfo, valueID jen.Code) jen.Code {
+	code := g.transformRegistry.For(t).
+		SetValueID(valueID).
+		SetQualFunc(g.qual).
+		Format()
+	if code == nil {
+		return jen.Qual("fmt", "Sprintf").Call(jen.Lit("%v"), valueID)
+	}
+
+	return code
+}
+
+func isStructParam(t *gomosaic.TypeInfo) bool {
+	return t != nil && t.IsNamed && t.ElemType != nil && t.ElemType.Struct != nil
+}
+
+func jsonFieldName(f *gomosaic.VarInfo) string {
+	if f.Tags != nil {
+		if tag, err := f.Tags.Get("json"); err == nil && tag.Name != "" {
+			return tag.Name
+		}
+	}
+
+	return strcase.ToLowerCamel(f.Name)
 }
 
 func (g *generator) genHeaderParams(body *jen.Group, m *annotation.MethodOpt) {
 	for _, p := range m.HeaderParams {
 		body.Id("req").Dot("Header").Dot("Set").Call(
 			jen.Lit(p.Name),
-			jen.Qual("fmt", "Sprintf").Call(jen.Lit("%v"), jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))),
+			g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))),
 		)
 	}
 }
@@ -267,7 +402,7 @@ func (g *generator) genCookieParams(body *jen.Group, m *annotation.MethodOpt) {
 		body.Id("req").Dot("AddCookie").Call(
 			jen.Qual("net/http", "Cookie").Values(jen.Dict{
 				jen.Id("Name"):  jen.Lit(p.Name),
-				jen.Id("Value"): jen.Qual("fmt", "Sprintf").Call(jen.Lit("%v"), jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))),
+				jen.Id("Value"): g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))),
 			}),
 		)
 	}
@@ -288,7 +423,32 @@ func (g *generator) genGzipReader(body *jen.Group, m *annotation.MethodOpt) {
 	)
 }
 
+// isBytesResult сообщает, что метод возвращает единственный результат-слайс []byte.
+func isBytesResult(m *annotation.MethodOpt) bool {
+	if len(m.BodyResults) != 1 {
+		return false
+	}
+
+	t := m.BodyResults[0].Var.Type
+	return t.IsSlice && t.ElemType.IsBasic && t.ElemType.BasicKind == gomosaic.Byte
+}
+
 func (g *generator) genReadResponse(body *jen.Group, m *annotation.MethodOpt) {
+	if isBytesResult(m) {
+		body.List(jen.Id("respBody"), jen.Err()).Op(":=").Qual("io", "ReadAll").Call(jen.Id("reader"))
+		body.If(jen.Err().Op("!=").Nil()).Block(
+			jen.Return(annotation.MakeEmptyResults(m.BodyResults, g.qual, jen.Err())...),
+		)
+		body.If(jen.Id(recvNameReq).Dot("opts").Dot("tracer").Op("!=").Nil()).Block(
+			jen.Id("span").Dot("SetStatus").Call(
+				jen.Qual("go.opentelemetry.io/otel/codes", "Ok"),
+				jen.Lit("request sent successfully"),
+			),
+		)
+		body.Return(jen.Id("respBody"), jen.Nil())
+		return
+	}
+
 	if len(m.BodyResults) == 1 && m.Single.Resp {
 		body.Var().Id("respBody").Add(jenutils.TypeInfoQual(m.BodyResults[0].Var.Type, g.qual))
 	} else {

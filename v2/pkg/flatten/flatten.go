@@ -9,6 +9,7 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/pkg/gomosaic"
 )
 
+// Paths описывает путь из вложенных полей.
 type Paths []PathName
 
 func (p Paths) String() string {
@@ -25,6 +26,7 @@ func (p Paths) String() string {
 	return path.String()
 }
 
+// FlattenPath описывает один путь во вложенной структуре.
 type FlattenPath struct {
 	Var      *gomosaic.VarInfo
 	Path     *jen.Statement
@@ -33,6 +35,7 @@ type FlattenPath struct {
 	IsArray  bool
 }
 
+// PathName хранит имя поля и его JSON-имя.
 type PathName struct {
 	Name     string
 	JSONName string
@@ -43,6 +46,7 @@ func (n PathName) Value() string {
 	return n.Name
 }
 
+// JSON возвращает JSON-имя поля или обычное имя, если тега нет.
 func (n PathName) JSON() string {
 	if n.JSONName == "" {
 		return n.Name
@@ -51,6 +55,7 @@ func (n PathName) JSON() string {
 	return n.JSONName
 }
 
+// FlattenProcessor обходит вложенную структуру и собирает пути.
 type FlattenProcessor struct {
 	allPaths    []FlattenPath
 	currentPath []PathName
@@ -144,6 +149,7 @@ func (p *FlattenProcessor) Flatten(v *gomosaic.VarInfo) []FlattenPath {
 	return p.allPaths
 }
 
+// Flatten преобразует переменную в список путей.
 func Flatten(v *gomosaic.VarInfo) []FlattenPath {
 	return (&FlattenProcessor{}).Flatten(v)
 }

@@ -9,13 +9,16 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
 )
 
-// Plugin — HTTP-клиентский плагин v2.
+// Plugin генерирует HTTP-клиент.
 type Plugin struct{}
 
+// NewPlugin создаёт HTTP-клиентский плагин.
 func NewPlugin() *Plugin { return &Plugin{} }
 
+// Name реализует gomosaic.Generator.
 func (p *Plugin) Name() string { return "http-client" }
 
+// Generate реализует gomosaic.Generator.
 func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, types []*gomosaic.NameTypeInfo) (map[string]gomosaic.File, error) {
 	outputDir := gomosaic.OutputDirFromContext(ctx)
 
@@ -25,7 +28,11 @@ func (p *Plugin) Generate(ctx context.Context, module *gomosaic.ModuleInfo, type
 	}
 
 	f := gomosaic.NewGoFile(module, outputDir)
-	gen := &generator{qual: f.Qual, modulePath: module.Path}
+	gen := &generator{
+		qual:              f.Qual,
+		modulePath:        module.Path,
+		transformRegistry: gomosaic.DefaultTransformRegistry(),
+	}
 	code, err := gen.Generate(a)
 	if err != nil {
 		return nil, err

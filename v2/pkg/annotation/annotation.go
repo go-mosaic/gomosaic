@@ -8,6 +8,9 @@ import (
 	"unicode"
 )
 
+const keyValueParts = 2
+
+// Annotation хранит разобранную аннотацию: ключ, позиционные и именованные параметры.
 type Annotation struct {
 	Key         string
 	Params      []string
@@ -35,7 +38,7 @@ func Parse(s string) (*Annotation, error) {
 	for i := 1; i < len(parts); i++ {
 		part := parts[i]
 		if strings.Contains(part, "=") {
-			kv := strings.SplitN(part, "=", 2)
+			kv := strings.SplitN(part, "=", keyValueParts)
 			ann.NamedParams[kv[0]] = unquote(kv[1])
 		} else {
 			ann.Params = append(ann.Params, unquote(part))

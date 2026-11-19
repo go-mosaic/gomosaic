@@ -1,6 +1,7 @@
 package client
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/dave/jennifer/jen"
@@ -18,8 +19,9 @@ const (
 )
 
 type generator struct {
-	qual       gomosaic.QualFunc
-	modulePath string
+	qual              gomosaic.QualFunc
+	modulePath        string
+	transformRegistry *gomosaic.TransformRegistry
 }
 
 func (g *generator) Generate(services []*annotation.IfaceOpt) (jen.Code, error) {
@@ -652,15 +654,28 @@ func (g *generator) genMakeBodyRequestMethod(m *annotation.MethodOpt) jen.Code {
 		fn.Block(
 			jen.Return(jen.Id(recvNameReq).Dot(fldName)),
 		)
-	} else {
-		fn.Block(
-			jen.Return(jen.Struct(annotation.MakeStructFieldsFromParams(m.BodyParams, g.qual)).ValuesFunc(func(dict *jen.Group) {
-				for _, p := range m.BodyParams {
-					dict.Id(strcase.ToCamel(p.Var.Name)).Op(":").Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))
-				}
-			})),
-		)
+		return fn
 	}
+
+	structFields := annotation.MakeStructFieldsFromParams(m.BodyParams, g.qual)
+	innerValues := jen.DictFunc(func(d jen.Dict) {
+		for _, p := range m.BodyParams {
+			d[jen.Id(strcase.ToCamel(p.Var.Name))] = jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))
+		}
+	})
+
+	if len(m.WrapReq.PathParts) == 0 {
+		fn.Block(jen.Return(jen.Struct(structFields).Values(innerValues)))
+		return fn
+	}
+
+	structFields = annotation.WrapStruct(m.WrapReq.PathParts, structFields)
+	values := innerValues
+	for _, partName := range slices.Backward(m.WrapReq.PathParts) {
+		values = jen.Dict{jen.Id(strcase.ToCamel(partName)): jen.Values(values)}
+	}
+
+	fn.Block(jen.Return(jen.Struct(structFields).Values(values)))
 
 	return fn
 }

@@ -24,7 +24,7 @@ func OpenAPIHandler() http.Handler {
 				"type":   "integer",
 			},
 		}},
-		"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Успешный ответ"}},
+		"responses": map[string]interface{}{"200": map[string]interface{}{"description": "Successful response"}},
 		"summary":   "GetUser UserService",
 		"tags":      []string{"users"},
 	}}}

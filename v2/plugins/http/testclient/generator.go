@@ -55,11 +55,12 @@ func (g *generator) Generate(ifaceOpts []*annotation.IfaceOpt, configs []Config)
 						if len(methodOpt.Func.Results) > 0 {
 							s.ListFunc(func(group *jen.Group) {
 								for _, r := range methodOpt.Func.Results {
-									if r.IsError {
+									switch {
+									case r.IsError:
 										group.Id(r.Name)
-									} else if !cfg.CheckError {
+									case !cfg.CheckError:
 										group.Id(r.Name)
-									} else {
+									default:
 										group.Id("_")
 									}
 								}
@@ -167,7 +168,8 @@ func (g *generator) genBodyParamsGenerate(methodOpt *annotation.MethodOpt) jen.C
 				typeInfo = typeInfo.ElemType
 			}
 
-			if typeInfo.Struct != nil {
+			switch {
+			case typeInfo.Struct != nil:
 				for _, f := range typeInfo.Struct.Fields {
 					for _, v := range flatten.Flatten(f) {
 						if v.IsArray {
@@ -176,7 +178,7 @@ func (g *generator) genBodyParamsGenerate(methodOpt *annotation.MethodOpt) jen.C
 						group.Id("serverRequest").Dot(strcase.ToCamel(p.Var.Name)).Op(".").Add(v.Path).Op("=").Add(g.typeToValue(v.Var.Type)).Line()
 					}
 				}
-			} else if p.Var.Type.IsPtr && p.Var.Type.ElemType.IsNamed && p.Var.Type.ElemType.ElemType != nil && p.Var.Type.ElemType.ElemType.Struct != nil {
+			case p.Var.Type.IsPtr && p.Var.Type.ElemType.IsNamed && p.Var.Type.ElemType.ElemType != nil && p.Var.Type.ElemType.ElemType.Struct != nil:
 				innerType := p.Var.Type.ElemType.ElemType
 				group.Id("serverRequest").Dot(strcase.ToCamel(p.Var.Name)).Op("=").Op("&").Add(jenutils.TypeInfoQual(p.Var.Type.ElemType, g.qual)).ValuesFunc(func(dict *jen.Group) {
 					for _, f := range innerType.Struct.Fields {
@@ -188,7 +190,7 @@ func (g *generator) genBodyParamsGenerate(methodOpt *annotation.MethodOpt) jen.C
 						}
 					}
 				})
-			} else {
+			default:
 				group.Id("serverRequest").Dot(strcase.ToCamel(p.Var.Name)).Op("=").Add(g.typeToValue(p.Var.Type)).Line()
 			}
 		}

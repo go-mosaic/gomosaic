@@ -3,11 +3,11 @@
 //
 // Поддерживаемые аннотации:
 //
-//	@env-name VAR_NAME      — имя переменной окружения
-//	@env-validate required  — обязательное поле
-//	@env-validate max-len=N — максимальная длина строки
-//	@env-validate min-len=N — минимальная длина строки
-//	@env-default value      — значение по умолчанию
+//	@env-name VAR_NAME: имя переменной окружения
+//	@env-validate required: обязательное поле
+//	@env-validate max-len=N: максимальная длина строки
+//	@env-validate min-len=N: минимальная длина строки
+//	@env-default value: значение по умолчанию
 //
 // Пример использования:
 //
@@ -61,7 +61,7 @@ type FieldOpt struct {
 	MaxLen   int
 	MinLen   int
 
-	// Для вложенных структур — рекурсивная загрузка
+	// Для вложенных структур используем рекурсивную загрузку
 	Children []*FieldOpt
 }
 
@@ -70,10 +70,6 @@ type StructOpt struct {
 	NameTypeInfo *gomosaic.NameTypeInfo
 	Fields       []*FieldOpt
 }
-
-const (
-	annotationPrefix = "env"
-)
 
 // ParseValidation парсит строку валидации "required max-len=100 min-len=3".
 func ParseValidation(validate string) (required bool, maxLen, minLen int, err error) {

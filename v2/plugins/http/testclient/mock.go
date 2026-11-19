@@ -12,7 +12,7 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
 )
 
-// genMockServerGenerate — генерирует mock-сервер с проверкой входящих параметров.
+// genMockServerGenerate: генерирует mock-сервер с проверкой входящих параметров.
 func (g *generator) genMockServerGenerate(methodOpt *annotation.MethodOpt, cfg Config) jen.Code {
 	group := jen.NewFile("").Null()
 
@@ -189,7 +189,7 @@ func (g *generator) genCompareHeaderParam(body *jen.Group, methodOpt *annotation
 	)
 }
 
-// buildResponseData — строит структуру для маршалинга ответа.
+// buildResponseData: строит структуру для маршалинга ответа.
 func (g *generator) buildResponseData(methodOpt *annotation.MethodOpt) jen.Code {
 	if len(methodOpt.BodyResults) == 1 && methodOpt.Single.Resp {
 		return jen.Id("serverResponse")
