@@ -55,15 +55,15 @@ func (g *generator) genRegisterHandlers(s *annotation.IfaceOpt) jen.Code {
 					if len(m.HeaderParams) > 0 {
 						group.Add(g.genNonBodyParams(m.HeaderParams, func(name string) jen.Code {
 							return jen.Id("req").Dot("Header").Call(jen.Lit(name))
-						}))
+						}, m.TimeFormat))
 					}
 					if len(m.QueryParams) > 0 {
-						group.Add(g.genQueryParams(m.QueryParams))
+						group.Add(g.genQueryParams(m.QueryParams, m.TimeFormat))
 					}
 					if len(m.PathParams) > 0 {
 						group.Add(g.genNonBodyParams(m.PathParams, func(name string) jen.Code {
 							return jen.Id("req").Dot("PathValue").Call(jen.Lit(name))
-						}))
+						}, m.TimeFormat))
 					}
 
 					group.Add(g.genCallServiceMethod(m))
@@ -82,7 +82,7 @@ func (g *generator) genRegisterHandlers(s *annotation.IfaceOpt) jen.Code {
 								for _, name := range m.WrapResp.PathParts {
 									s.Dot(strcase.ToCamel(name))
 								}
-							}).Dot(strcase.ToCamel(result.Var.Name)).Op("=").Id(result.Var.Name)
+							}).Dot(annotation.ResultFieldName(result)).Op("=").Id(result.Var.Name)
 						}
 					}
 

@@ -29,6 +29,8 @@ func (g *generator) Generate(services []*annotation.IfaceOpt) (jen.Code, error) 
 
 	group.Add(g.genClientTypes())
 
+	services = enabledServices(services)
+
 	// @http-copy-types: копируем DTO из пакета контекста в пакет клиента.
 	stGen := structure.NewGenerator(group, g.modulePath)
 	for _, s := range services {
@@ -53,6 +55,19 @@ func (g *generator) Generate(services []*annotation.IfaceOpt) (jen.Code, error) 
 		}
 	}
 	return group, nil
+}
+
+// enabledServices возвращает интерфейсы с @http-client-enable.
+func enabledServices(services []*annotation.IfaceOpt) []*annotation.IfaceOpt {
+	enabled := make([]*annotation.IfaceOpt, 0, len(services))
+
+	for _, s := range services {
+		if s.ClientEnable {
+			enabled = append(enabled, s)
+		}
+	}
+
+	return enabled
 }
 
 // clientMethods возвращает методы, не исключённые из клиента (@http-client-skip).

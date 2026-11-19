@@ -57,13 +57,51 @@ func (g *generator) genDecodeBodyParams(opt *annotation.MethodOpt, params []*ann
 					}
 				}
 			})
+
+			if opt.Use.URLEncoded {
+				group.Case(jen.Lit("application/x-www-form-urlencoded")).BlockFunc(func(group *jen.Group) {
+					group.List(jen.Id("form"), jen.Err()).Op(":=").Id("req").Dot("URLEncodedForm").Call()
+					group.If(jen.Err().Op("!=").Nil()).Block(
+						jen.Return(jen.Err()),
+					)
+
+					for _, p := range params {
+						group.Add(g.parseValue(
+							p.Var.Type,
+							jen.Id("form").Dot("Get").Call(jen.Lit(p.Name)),
+							jen.Id(strcase.ToLowerCamel(p.Var.Name)),
+							opt.TimeFormat,
+						))
+					}
+				})
+			}
+
+			if opt.Use.Multipart {
+				group.Case(jen.Lit("multipart/form-data")).BlockFunc(func(group *jen.Group) {
+					group.List(jen.Id("form"), jen.Err()).Op(":=").Id("req").Dot("MultipartForm").Call(
+						jen.Lit(int64(opt.FormMaxMemory)),
+					)
+					group.If(jen.Err().Op("!=").Nil()).Block(
+						jen.Return(jen.Err()),
+					)
+
+					for _, p := range params {
+						group.Add(g.parseValue(
+							p.Var.Type,
+							jen.Id("form").Dot("FormValue").Call(jen.Lit(p.Name)),
+							jen.Id(strcase.ToLowerCamel(p.Var.Name)),
+							opt.TimeFormat,
+						))
+					}
+				})
+			}
 		})
 	}
 
 	return group
 }
 
-func (g *generator) genQueryParams(params []*annotation.MethodParamOpt) jen.Code {
+func (g *generator) genQueryParams(params []*annotation.MethodParamOpt, timeFormat string) jen.Code {
 	group := jen.NewFile("")
 	group.Id("q").Op(":=").Id("req").Dot("Queries").Call()
 
@@ -72,7 +110,7 @@ func (g *generator) genQueryParams(params []*annotation.MethodParamOpt) jen.Code
 		group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qual))
 
 		if isStructParam(p.Var.Type) {
-			g.genStructQueryFields(group, name, p.Var.Type, func(key string) jen.Code {
+			g.genStructQueryFields(group, name, p.Var.Type, timeFormat, func(key string) jen.Code {
 				return jen.Id("q").Dot("Get").Call(jen.Lit(key))
 			})
 
@@ -85,7 +123,7 @@ func (g *generator) genQueryParams(params []*annotation.MethodParamOpt) jen.Code
 		}
 
 		valueID := jen.Id("q").Dot("Get").Call(jen.Lit(queryName))
-		group.Add(g.parseValue(p.Var.Type, valueID, jen.Id(name)))
+		group.Add(g.parseValue(p.Var.Type, valueID, jen.Id(name), timeFormat))
 	}
 
 	return group
@@ -97,6 +135,7 @@ func (g *generator) genStructQueryFields(
 	group *jen.File,
 	varName string,
 	t *gomosaic.TypeInfo,
+	timeFormat string,
 	getValue func(key string) jen.Code,
 ) {
 	for _, f := range t.ElemType.Struct.Fields {
@@ -110,15 +149,15 @@ func (g *generator) genStructQueryFields(
 				jenutils.TypeInfoQual(f.Type, g.qual), jen.Len(valueID),
 			)
 			group.For(jen.List(jen.Id("i"), jen.Id("val")).Op(":=").Range().Add(valueID)).BlockFunc(func(inner *jen.Group) {
-				inner.Add(g.parseValue(f.Type.ElemType, jen.Id("val"), jen.Id(varName).Dot(f.Name).Index(jen.Id("i"))))
+				inner.Add(g.parseValue(f.Type.ElemType, jen.Id("val"), jen.Id(varName).Dot(f.Name).Index(jen.Id("i")), timeFormat))
 			})
 		case f.Type.IsBasic || f.Type.IsNamed:
-			group.Add(g.parseValue(f.Type, getValue(key), jen.Id(varName).Dot(f.Name)))
+			group.Add(g.parseValue(f.Type, getValue(key), jen.Id(varName).Dot(f.Name), timeFormat))
 		}
 	}
 }
 
-func (g *generator) genNonBodyParams(params []*annotation.MethodParamOpt, valueFn func(name string) jen.Code) jen.Code {
+func (g *generator) genNonBodyParams(params []*annotation.MethodParamOpt, valueFn func(name string) jen.Code, timeFormat string) jen.Code {
 	group := jen.NewFile("")
 
 	for _, p := range params {
@@ -126,7 +165,7 @@ func (g *generator) genNonBodyParams(params []*annotation.MethodParamOpt, valueF
 		group.Var().Id(name).Add(jenutils.TypeInfoQual(p.Var.Type, g.qual))
 
 		if isStructParam(p.Var.Type) {
-			g.genStructQueryFields(group, name, p.Var.Type, valueFn)
+			g.genStructQueryFields(group, name, p.Var.Type, timeFormat, valueFn)
 
 			continue
 		}
@@ -136,19 +175,20 @@ func (g *generator) genNonBodyParams(params []*annotation.MethodParamOpt, valueF
 			valueName = p.NameOpt.Value
 		}
 
-		group.Add(g.parseValue(p.Var.Type, valueFn(valueName), jen.Id(name)))
+		group.Add(g.parseValue(p.Var.Type, valueFn(valueName), jen.Id(name), timeFormat))
 	}
 
 	return group
 }
 
 // parseValue возвращает код разбора значения.
-func (g *generator) parseValue(t *gomosaic.TypeInfo, valueID, assignID jen.Code) jen.Code {
+func (g *generator) parseValue(t *gomosaic.TypeInfo, valueID, assignID jen.Code, timeFormat string) jen.Code {
 	code := g.transformRegistry.For(t).
 		SetValueID(valueID).
 		SetAssignID(assignID).
 		SetQualFunc(g.qual).
 		SetErrStatements(jen.Return(jen.Err())).
+		SetTimeFormat(timeFormat).
 		Parse()
 	if code == nil {
 		return jen.Null()
@@ -158,7 +198,11 @@ func (g *generator) parseValue(t *gomosaic.TypeInfo, valueID, assignID jen.Code)
 }
 
 func isStructParam(t *gomosaic.TypeInfo) bool {
-	return t != nil && t.IsNamed && t.ElemType != nil && t.ElemType.Struct != nil
+	if t == nil || !t.IsNamed || t.ElemType == nil || t.ElemType.Struct == nil {
+		return false
+	}
+
+	return !gomosaic.IsTime(t)
 }
 
 func jsonFieldName(f *gomosaic.VarInfo) string {

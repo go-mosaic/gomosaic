@@ -35,11 +35,41 @@ func MakeStructFieldsFromParams(params []*MethodParamOpt, qual gomosaic.QualFunc
 func MakeStructFieldsFromResults(results []*MethodResultOpt, qual gomosaic.QualFunc) jen.Code {
 	structFields := jen.NewFile("")
 	for _, r := range results {
+		if _, ok := flatFieldName(r); ok {
+			structFields.Add(jenutils.TypeInfoQual(r.Var.Type, qual))
+			continue
+		}
+
 		jsonTag := r.Name
 		fld := structFields.Id(strcase.ToCamel(r.Var.Name))
 		fld.Add(jenutils.TypeInfoQual(r.Var.Type, qual)).Tag(map[string]string{"json": jsonTag})
 	}
 	return structFields
+}
+
+// ResultFieldName возвращает имя поля результата в сгенерированной структуре.
+func ResultFieldName(r *MethodResultOpt) string {
+	if name, ok := flatFieldName(r); ok {
+		return name
+	}
+	return strcase.ToCamel(r.Var.Name)
+}
+
+// flatFieldName возвращает имя встроенного поля для @http-flat.
+func flatFieldName(r *MethodResultOpt) (string, bool) {
+	if !r.Flat {
+		return "", false
+	}
+
+	t := r.Var.Type
+	if t.IsPtr {
+		t = t.ElemType
+	}
+	if !t.IsNamed || t.Name == "" {
+		return "", false
+	}
+
+	return strcase.ToCamel(t.Name), true
 }
 
 // MakeEmptyResults возвращает нулевые значения для результатов.

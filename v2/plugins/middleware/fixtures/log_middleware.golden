@@ -25,13 +25,7 @@ func LogUserServiceMiddleware(logger span.Logger) runtime.Middleware[logservice.
 	}
 }
 func (m *UserServiceLogMiddleware) CreateUser(ctx context.Context, name string) error {
-	span := span.StartLogSpan(m.logger, "(logservice.UserService).CreateUser")
 	err := m.next.CreateUser(ctx, name)
-	if err != nil {
-		span.FinishWithError(ctx, err)
-	} else {
-		span.Finish(ctx)
-	}
 	return err
 }
 func (m *UserServiceLogMiddleware) GetUser(ctx context.Context, id int) (string, error) {

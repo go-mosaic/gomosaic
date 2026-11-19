@@ -25,6 +25,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type contextKey string
@@ -215,6 +216,8 @@ const serviceDeleteUserShortName = "(service.UserService).DeleteUser"
 const serviceDeleteUserFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).DeleteUser"
 const serviceGetFeedShortName = "(service.UserService).GetFeed"
 const serviceGetFeedFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).GetFeed"
+const serviceGetProfileShortName = "(service.UserService).GetProfile"
+const serviceGetProfileFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).GetProfile"
 const serviceGetRawShortName = "(service.UserService).GetRaw"
 const serviceGetRawFullName = "(github.com/go-mosaic/gomosaic/v2/plugins/http/client/fixtures/full.UserService).GetRaw"
 const serviceGetUserShortName = "(service.UserService).GetUser"
@@ -299,9 +302,13 @@ func (r *UserServiceCreateNoteRequest) Execute(opts ...ClientOption) error {
 	if r.opts.propagator != nil {
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
-	switch r.opts.content {
+	contentType := r.opts.content
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	switch contentType {
 	default:
-		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add("Content-Type", contentType)
 		var reqData bytes.Buffer
 		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
 			if r.opts.tracer != nil {
@@ -411,9 +418,13 @@ func (r *UserServiceCreateUserRequest) Execute(opts ...ClientOption) (string, *U
 	if r.opts.propagator != nil {
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
-	switch r.opts.content {
+	contentType := r.opts.content
+	if contentType == "" {
+		contentType = "application/vnd.api+json"
+	}
+	switch contentType {
 	default:
-		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add("Content-Type", contentType)
 		var reqData bytes.Buffer
 		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
 			if r.opts.tracer != nil {
@@ -708,6 +719,116 @@ func (r *UserServiceClient) GetFeed(ctx context.Context) ([]User, error) {
 	}
 
 	return users, nil
+}
+
+type UserServiceGetProfileRequest struct {
+	c    *UserServiceClient
+	opts clientOptions
+}
+
+func (r *UserServiceGetProfileRequest) Execute(opts ...ClientOption) (*User, int, error) {
+	for _, o := range opts {
+		o(&r.opts)
+	}
+	ctx, cancel := context.WithCancel(r.opts.ctx)
+	defer cancel()
+	var span trace.Span
+	if r.opts.tracer != nil {
+		ctx, span = r.opts.tracer.Start(ctx, serviceGetProfileShortName, trace.WithSpanKind(trace.SpanKindServer))
+		defer span.End()
+	}
+	path := "/profile"
+	r.opts.ctx = context.WithValue(r.opts.ctx, methodContextKey, serviceGetProfileFullName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, shortMethodContextKey, serviceGetProfileShortName)
+	r.opts.ctx = context.WithValue(r.opts.ctx, scopeNameContextKey, serviceScopeName)
+	req, err := http.NewRequestWithContext(r.opts.ctx, "GET", r.c.target+path, nil)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("request make error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, 0, err
+	}
+	req.Header.Set("Accept", "application/json")
+	if r.opts.propagator != nil {
+		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
+	}
+	before := append(r.c.opts.before, r.opts.before...)
+	for _, before := range before {
+		ctx, err = before(ctx, req)
+		if err != nil {
+			return nil, 0, err
+		}
+	}
+	resp, err := r.opts.client.Do(req)
+	if err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("do request error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed sent request")
+		}
+		return nil, 0, err
+	}
+	after := append(r.c.opts.after, r.opts.after...)
+	for _, after := range after {
+		ctx = after(ctx, resp)
+	}
+	defer resp.Body.Close()
+	defer cancel()
+	if resp.StatusCode > 399 {
+		if r.opts.tracer != nil {
+			span.AddEvent("response status code failed", trace.WithAttributes(attribute.String("reason", resp.Status)))
+			span.SetStatus(codes.Error, "failed response")
+		}
+		if r.opts.errorDecode != nil {
+			return nil, 0, r.opts.errorDecode(resp.Body, resp.StatusCode)
+		}
+		return nil, 0, errorDecode(resp.Body, resp.StatusCode, func(data []byte) error {
+			return &ClientError{
+				Data:       data,
+				StatusCode: resp.StatusCode,
+			}
+		})
+	}
+	var reader io.ReadCloser
+	if resp.Header.Get("Content-Encoding") == "gzip" {
+		reader, err = gzip.NewReader(resp.Body)
+		if err != nil {
+			return nil, 0, err
+		}
+		defer reader.Close()
+	} else {
+		reader = resp.Body
+	}
+	var respBody struct {
+		*User
+		Total int `json:"total"`
+	}
+	if err = json.NewDecoder(reader).Decode(&respBody); err != nil {
+		if r.opts.tracer != nil {
+			span.AddEvent("JSON decode error", trace.WithAttributes(attribute.String("reason", err.Error())))
+			span.SetStatus(codes.Error, "failed read response")
+		}
+		return nil, 0, err
+	}
+	if r.opts.tracer != nil {
+		span.SetStatus(codes.Ok, "request sent successfully")
+	}
+	return respBody.User, respBody.Total, nil
+}
+func (r *UserServiceClient) GetProfileRequest() *UserServiceGetProfileRequest {
+	m := &UserServiceGetProfileRequest{
+		c:    r,
+		opts: r.opts,
+	}
+	return m
+}
+func (r *UserServiceClient) GetProfile(ctx context.Context) (*User, int, error) {
+	user, total, err := r.GetProfileRequest().Execute(WithContext(ctx))
+	if err != nil {
+		return nil, 0, err
+	}
+
+	return user, total, nil
 }
 
 type UserServiceGetRawRequest struct {
@@ -1087,7 +1208,7 @@ func (r *UserServiceListUsersRequest) Execute(opts ...ClientOption) ([]User, err
 		}
 		return nil, err
 	}
-	req.Header.Set("Accept", "application/json")
+	req.Header.Set("Accept", "application/vnd.api+json")
 	if r.opts.propagator != nil {
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
@@ -1173,6 +1294,7 @@ type UserServiceSearchUsersRequest struct {
 	opts   clientOptions
 	query  string
 	limit  int
+	since  time.Time
 	offset int
 }
 
@@ -1182,6 +1304,10 @@ func (r *UserServiceSearchUsersRequest) SetQuery(v string) *UserServiceSearchUse
 }
 func (r *UserServiceSearchUsersRequest) SetLimit(v int) *UserServiceSearchUsersRequest {
 	r.limit = v
+	return r
+}
+func (r *UserServiceSearchUsersRequest) SetSince(v time.Time) *UserServiceSearchUsersRequest {
+	r.since = v
 	return r
 }
 func (r *UserServiceSearchUsersRequest) SetOffset(v int) *UserServiceSearchUsersRequest {
@@ -1218,6 +1344,7 @@ func (r *UserServiceSearchUsersRequest) Execute(opts ...ClientOption) ([]User, i
 	q := req.URL.Query()
 	q.Set("query", r.query)
 	q.Set("limit_val", strconv.FormatInt(int64(r.limit), 10))
+	q.Set("since", r.since.Format("2006-01-02"))
 	req.URL.RawQuery = q.Encode()
 	req.Header.Set("X-Offset", strconv.FormatInt(int64(r.offset), 10))
 	before := append(r.c.opts.before, r.opts.before...)
@@ -1282,18 +1409,19 @@ func (r *UserServiceSearchUsersRequest) Execute(opts ...ClientOption) ([]User, i
 	}
 	return respBody.Users, respBody.Total, nil
 }
-func (r *UserServiceClient) SearchUsersRequest(query string, limit int, offset int) *UserServiceSearchUsersRequest {
+func (r *UserServiceClient) SearchUsersRequest(query string, limit int, since time.Time, offset int) *UserServiceSearchUsersRequest {
 	m := &UserServiceSearchUsersRequest{
 		c:    r,
 		opts: r.opts,
 	}
 	m.SetQuery(query)
 	m.SetLimit(limit)
+	m.SetSince(since)
 	m.SetOffset(offset)
 	return m
 }
-func (r *UserServiceClient) SearchUsers(ctx context.Context, query string, limit int, offset int) ([]User, int, error) {
-	users, total, err := r.SearchUsersRequest(query, limit, offset).Execute(WithContext(ctx))
+func (r *UserServiceClient) SearchUsers(ctx context.Context, query string, limit int, since time.Time, offset int) ([]User, int, error) {
+	users, total, err := r.SearchUsersRequest(query, limit, since, offset).Execute(WithContext(ctx))
 	if err != nil {
 		return nil, 0, err
 	}
@@ -1352,9 +1480,13 @@ func (r *UserServiceSubmitFormRequest) Execute(opts ...ClientOption) error {
 	if r.opts.propagator != nil {
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
-	switch r.opts.content {
+	contentType := r.opts.content
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	switch contentType {
 	default:
-		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add("Content-Type", contentType)
 		var reqData bytes.Buffer
 		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
 			if r.opts.tracer != nil {
@@ -1472,9 +1604,13 @@ func (r *UserServiceUploadRequest) Execute(opts ...ClientOption) error {
 	if r.opts.propagator != nil {
 		r.opts.propagator.Inject(ctx, propagation.HeaderCarrier(req.Header))
 	}
-	switch r.opts.content {
+	contentType := r.opts.content
+	if contentType == "" {
+		contentType = "application/json"
+	}
+	switch contentType {
 	default:
-		req.Header.Add("Content-Type", "application/json")
+		req.Header.Add("Content-Type", contentType)
 		var reqData bytes.Buffer
 		if err := json.NewEncoder(&reqData).Encode(r.makeBodyRequest()); err != nil {
 			if r.opts.tracer != nil {

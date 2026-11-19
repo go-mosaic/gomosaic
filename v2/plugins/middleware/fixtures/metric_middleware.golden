@@ -24,6 +24,10 @@ func MetricMetricServiceMiddleware(collector span.MetricsCollector) runtime.Midd
 		}
 	}
 }
+func (m *MetricServiceMetricMiddleware) DeleteUser(ctx context.Context, id int) error {
+	err := m.next.DeleteUser(ctx, id)
+	return err
+}
 func (m *MetricServiceMetricMiddleware) GetUser(ctx context.Context, id int) (string, error) {
 	span := span.StartMetricSpan(m.collector, "(metricservice.MetricService).GetUser")
 	user, err := m.next.GetUser(ctx, id)

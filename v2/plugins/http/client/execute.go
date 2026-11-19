@@ -9,11 +9,19 @@ import (
 	"github.com/go-mosaic/gomosaic/v2/plugins/http/annotation"
 )
 
-const httpStatusLastSuccessCode = 399
+const (
+	httpStatusLastSuccessCode = 399
+	defaultContentType        = "application/json"
+)
 
 // genExecuteMethod генерирует метод Execute для выполнения HTTP-запроса.
 func (g *generator) genExecuteMethod(m *annotation.MethodOpt) jen.Code {
 	reqName := methodRequestName(m)
+
+	accept := m.Default.Accept
+	if accept == "" {
+		accept = defaultContentType
+	}
 
 	fn := jen.Func().Params(
 		jen.Id(recvNameReq).Op("*").Id(reqName),
@@ -97,7 +105,7 @@ func (g *generator) genExecuteMethod(m *annotation.MethodOpt) jen.Code {
 			errBody.Return(annotation.MakeEmptyResults(m.BodyResults, g.qual, jen.Err())...)
 		})
 
-		body.Id("req").Dot("Header").Dot("Set").Call(jen.Lit("Accept"), jen.Lit("application/json"))
+		body.Id("req").Dot("Header").Dot("Set").Call(jen.Lit("Accept"), jen.Lit(accept))
 
 		body.If(jen.Id(recvNameReq).Dot("opts").Dot("propagator").Op("!=").Nil()).Block(
 			jen.Id(recvNameReq).Dot("opts").Dot("propagator").Dot("Inject").Call(
@@ -217,7 +225,7 @@ func (g *generator) genPathWithParams(body *jen.Group, m *annotation.MethodOpt) 
 }
 
 func (g *generator) genJSONReqContent(body *jen.Group, m *annotation.MethodOpt) {
-	body.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Lit("application/json"))
+	body.Id("req").Dot("Header").Dot("Add").Call(jen.Lit("Content-Type"), jen.Id("contentType"))
 	body.Var().Id("reqData").Qual("bytes", "Buffer")
 
 	body.If(
@@ -247,7 +255,18 @@ func (g *generator) genJSONReqContent(body *jen.Group, m *annotation.MethodOpt) 
 // genBodyContent генерирует код заполнения тела запроса в зависимости от
 // выбранного Content-Type (JSON по умолчанию, опционально url-encoded и multipart).
 func (g *generator) genBodyContent(body *jen.Group, m *annotation.MethodOpt) {
-	body.Switch(jen.Id(recvNameReq).Dot("opts").Dot("content")).BlockFunc(func(sw *jen.Group) {
+	body.Id("contentType").Op(":=").Id(recvNameReq).Dot("opts").Dot("content")
+
+	fallbackContentType := m.Default.ContentType
+	if fallbackContentType == "" {
+		fallbackContentType = defaultContentType
+	}
+
+	body.If(jen.Id("contentType").Op("==").Lit("")).Block(
+		jen.Id("contentType").Op("=").Lit(fallbackContentType),
+	)
+
+	body.Switch(jen.Id("contentType")).BlockFunc(func(sw *jen.Group) {
 		sw.Default().BlockFunc(func(b *jen.Group) {
 			g.genJSONReqContent(b, m)
 		})
@@ -278,7 +297,7 @@ func (g *generator) genURLEncodedReqContent(body *jen.Group, m *annotation.Metho
 		}
 
 		valueID := jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))
-		body.Id("form").Dot("Set").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, valueID))
+		body.Id("form").Dot("Set").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, valueID, m.TimeFormat))
 	}
 
 	body.Id("req").Dot("Body").Op("=").Qual("io", "NopCloser").Call(
@@ -298,7 +317,7 @@ func (g *generator) genMultipartReqContent(body *jen.Group, m *annotation.Method
 
 		valueID := jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))
 		body.If(
-			jen.Err().Op("=").Id("multipartWriter").Dot("WriteField").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, valueID)),
+			jen.Err().Op("=").Id("multipartWriter").Dot("WriteField").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, valueID, m.TimeFormat)),
 			jen.Err().Op("!=").Nil(),
 		).Block(
 			jen.Return(annotation.MakeEmptyResults(m.BodyResults, g.qual, jen.Err())...),
@@ -316,11 +335,11 @@ func (g *generator) genQueryParams(body *jen.Group, m *annotation.MethodOpt) {
 		paramName := strcase.ToLowerCamel(p.Var.Name)
 
 		if isStructParam(p.Var.Type) {
-			g.genQueryStructFields(body, p.Var.Type, paramName)
+			g.genQueryStructFields(body, p.Var.Type, paramName, m.TimeFormat)
 			continue
 		}
 
-		body.Id("q").Dot("Set").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(paramName)))
+		body.Id("q").Dot("Set").Call(jen.Lit(p.Name), g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(paramName), m.TimeFormat))
 	}
 
 	for _, qv := range m.Query.Values {
@@ -343,7 +362,7 @@ func (g *generator) genQueryParams(body *jen.Group, m *annotation.MethodOpt) {
 
 // genQueryStructFields раскладывает query-параметр-структуру по полям
 // (имя ключа берётся из json-тега).
-func (g *generator) genQueryStructFields(body *jen.Group, t *gomosaic.TypeInfo, paramName string) {
+func (g *generator) genQueryStructFields(body *jen.Group, t *gomosaic.TypeInfo, paramName, timeFormat string) {
 	for _, f := range t.ElemType.Struct.Fields {
 		key := jsonFieldName(f)
 		valueID := jen.Id(recvNameReq).Dot(paramName).Dot(f.Name)
@@ -351,21 +370,22 @@ func (g *generator) genQueryStructFields(body *jen.Group, t *gomosaic.TypeInfo, 
 		if f.Type.IsSlice {
 			body.Id("q").Index(jen.Lit(key)).Op("=").Make(jen.Index().String(), jen.Len(valueID))
 			body.For(jen.List(jen.Id("i"), jen.Id("val")).Op(":=").Range().Add(valueID)).Block(
-				jen.Id("q").Index(jen.Lit(key)).Index(jen.Id("i")).Op("=").Add(g.formatValue(f.Type.ElemType, jen.Id("val"))),
+				jen.Id("q").Index(jen.Lit(key)).Index(jen.Id("i")).Op("=").Add(g.formatValue(f.Type.ElemType, jen.Id("val"), timeFormat)),
 			)
 			continue
 		}
 
-		body.Id("q").Dot("Set").Call(jen.Lit(key), g.formatValue(f.Type, valueID))
+		body.Id("q").Dot("Set").Call(jen.Lit(key), g.formatValue(f.Type, valueID, timeFormat))
 	}
 }
 
 // formatValue форматирует значение в строку через реестр трансформеров,
 // а при отсутствии подходящего трансформера — через fmt.Sprintf.
-func (g *generator) formatValue(t *gomosaic.TypeInfo, valueID jen.Code) jen.Code {
+func (g *generator) formatValue(t *gomosaic.TypeInfo, valueID jen.Code, timeFormat string) jen.Code {
 	code := g.transformRegistry.For(t).
 		SetValueID(valueID).
 		SetQualFunc(g.qual).
+		SetTimeFormat(timeFormat).
 		Format()
 	if code == nil {
 		return jen.Qual("fmt", "Sprintf").Call(jen.Lit("%v"), valueID)
@@ -375,7 +395,11 @@ func (g *generator) formatValue(t *gomosaic.TypeInfo, valueID jen.Code) jen.Code
 }
 
 func isStructParam(t *gomosaic.TypeInfo) bool {
-	return t != nil && t.IsNamed && t.ElemType != nil && t.ElemType.Struct != nil
+	if t == nil || !t.IsNamed || t.ElemType == nil || t.ElemType.Struct == nil {
+		return false
+	}
+
+	return !gomosaic.IsTime(t)
 }
 
 func jsonFieldName(f *gomosaic.VarInfo) string {
@@ -392,7 +416,7 @@ func (g *generator) genHeaderParams(body *jen.Group, m *annotation.MethodOpt) {
 	for _, p := range m.HeaderParams {
 		body.Id("req").Dot("Header").Dot("Set").Call(
 			jen.Lit(p.Name),
-			g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))),
+			g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name)), m.TimeFormat),
 		)
 	}
 }
@@ -402,7 +426,7 @@ func (g *generator) genCookieParams(body *jen.Group, m *annotation.MethodOpt) {
 		body.Id("req").Dot("AddCookie").Call(
 			jen.Qual("net/http", "Cookie").Values(jen.Dict{
 				jen.Id("Name"):  jen.Lit(p.Name),
-				jen.Id("Value"): g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name))),
+				jen.Id("Value"): g.formatValue(p.Var.Type, jen.Id(recvNameReq).Dot(strcase.ToLowerCamel(p.Var.Name)), m.TimeFormat),
 			}),
 		)
 	}
@@ -488,7 +512,7 @@ func (g *generator) genReadResponse(body *jen.Group, m *annotation.MethodOpt) {
 				if result.Var.IsError {
 					continue
 				}
-				ret.Id("respBody").Dot(strcase.ToCamel(result.Var.Name))
+				ret.Id("respBody").Dot(annotation.ResultFieldName(result))
 			}
 		}
 		ret.Nil()

@@ -4,6 +4,7 @@ import "mime/multipart"
 
 // PostsRequest параметры запроса для получения постов.
 // @gomosaic
+// @http-form-max-memory 1048576
 type PostsRequest struct {
 	// @http-default all
 	Tag string

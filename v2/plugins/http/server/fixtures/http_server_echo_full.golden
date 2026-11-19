@@ -11,6 +11,7 @@ import (
 	factory "github.com/go-mosaic/runtime/transport/factory"
 	v4 "github.com/labstack/echo/v4"
 	"strings"
+	"time"
 )
 
 type UserServiceOptions struct {
@@ -19,9 +20,12 @@ type UserServiceOptions struct {
 	middlewareCreateUser  []transport.Middleware
 	middlewareDeleteUser  []transport.Middleware
 	middlewareFilterUsers []transport.Middleware
+	middlewareGetProfile  []transport.Middleware
 	middlewareGetUser     []transport.Middleware
 	middlewareListUsers   []transport.Middleware
 	middlewareSearchUsers []transport.Middleware
+	middlewareSubmitForm  []transport.Middleware
+	middlewareUpload      []transport.Middleware
 }
 
 func (o *UserServiceOptions) TransportOptions(opts ...transport.TransportOption) *UserServiceOptions {
@@ -49,6 +53,11 @@ func (o *UserServiceOptions) MiddlewareFilterUsers(middleware ...transport.Middl
 	return o
 }
 
+func (o *UserServiceOptions) MiddlewareGetProfile(middleware ...transport.Middleware) *UserServiceOptions {
+	o.middlewareGetProfile = append(o.middlewareGetProfile, middleware...)
+	return o
+}
+
 func (o *UserServiceOptions) MiddlewareGetUser(middleware ...transport.Middleware) *UserServiceOptions {
 	o.middlewareGetUser = append(o.middlewareGetUser, middleware...)
 	return o
@@ -61,6 +70,16 @@ func (o *UserServiceOptions) MiddlewareListUsers(middleware ...transport.Middlew
 
 func (o *UserServiceOptions) MiddlewareSearchUsers(middleware ...transport.Middleware) *UserServiceOptions {
 	o.middlewareSearchUsers = append(o.middlewareSearchUsers, middleware...)
+	return o
+}
+
+func (o *UserServiceOptions) MiddlewareSubmitForm(middleware ...transport.Middleware) *UserServiceOptions {
+	o.middlewareSubmitForm = append(o.middlewareSubmitForm, middleware...)
+	return o
+}
+
+func (o *UserServiceOptions) MiddlewareUpload(middleware ...transport.Middleware) *UserServiceOptions {
+	o.middlewareUpload = append(o.middlewareUpload, middleware...)
 	return o
 }
 
@@ -142,6 +161,21 @@ func UserServiceRegisterHandlers(router *v4.Echo, svc full.UserService, opt *Use
 		resp.WriteData(req, respData)
 		return nil
 	}, append(opt.middleware, opt.middlewareFilterUsers...)...)
+	tr.AddRoute("GET", "/profile", func(req transport.Request, resp transport.Response) error {
+
+		user, total, err := svc.GetProfile(req.Context())
+		if err != nil {
+			return err
+		}
+		var respData struct {
+			*full.User
+			Total int `json:"total"`
+		}
+		respData.User = user
+		respData.Total = total
+		resp.WriteData(req, respData)
+		return nil
+	}, append(opt.middleware, opt.middlewareGetProfile...)...)
 	tr.AddRoute("GET", "/user/:id", func(req transport.Request, resp transport.Response) error {
 
 		var paramId int
@@ -187,8 +221,12 @@ func UserServiceRegisterHandlers(router *v4.Echo, svc full.UserService, opt *Use
 		if err := runtime.ParseInt(q.Get("limit_val"), 10, 64, &paramLimitVal); err != nil {
 			return err
 		}
+		var paramSince time.Time
+		if err := runtime.ParseTime("2006-01-02", q.Get("since"), &paramSince); err != nil {
+			return err
+		}
 
-		users, total, err := svc.SearchUsers(req.Context(), paramQuery, paramLimitVal, paramXOffset)
+		users, total, err := svc.SearchUsers(req.Context(), paramQuery, paramLimitVal, paramSince, paramXOffset)
 		if err != nil {
 			return err
 		}
@@ -201,4 +239,82 @@ func UserServiceRegisterHandlers(router *v4.Echo, svc full.UserService, opt *Use
 		resp.WriteData(req, respData)
 		return nil
 	}, append(opt.middleware, opt.middlewareSearchUsers...)...)
+	tr.AddRoute("POST", "/form", func(req transport.Request, resp transport.Response) error {
+
+		var name string
+		var since time.Time
+		contentType := req.Header("Content-Type")
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		parts := strings.Split(contentType, ";")
+		if len(parts) > 0 {
+			contentType = parts[0]
+		}
+		switch contentType {
+		case "application/json":
+			var reqBody struct {
+				Name  string    `json:"name,omitempty"`
+				Since time.Time `json:"since,omitempty"`
+			}
+			if err := req.ReadData(&reqBody); err != nil {
+				return err
+			}
+			name = reqBody.Name
+			since = reqBody.Since
+		case "application/x-www-form-urlencoded":
+			form, err := req.URLEncodedForm()
+			if err != nil {
+				return err
+			}
+			name = form.Get("name")
+			if err := runtime.ParseTime("2006-01-02", form.Get("since"), &since); err != nil {
+				return err
+			}
+		}
+
+		err := svc.SubmitForm(req.Context(), name, since)
+		if err != nil {
+			return err
+		}
+		var respData struct{}
+		resp.WriteData(req, respData)
+		return nil
+	}, append(opt.middleware, opt.middlewareSubmitForm...)...)
+	tr.AddRoute("POST", "/upload", func(req transport.Request, resp transport.Response) error {
+
+		var filename string
+		contentType := req.Header("Content-Type")
+		if contentType == "" {
+			contentType = "application/json"
+		}
+		parts := strings.Split(contentType, ";")
+		if len(parts) > 0 {
+			contentType = parts[0]
+		}
+		switch contentType {
+		case "application/json":
+			var reqBody struct {
+				Filename string `json:"filename,omitempty"`
+			}
+			if err := req.ReadData(&reqBody); err != nil {
+				return err
+			}
+			filename = reqBody.Filename
+		case "multipart/form-data":
+			form, err := req.MultipartForm(int64(2048))
+			if err != nil {
+				return err
+			}
+			filename = form.FormValue("filename")
+		}
+
+		err := svc.Upload(req.Context(), filename)
+		if err != nil {
+			return err
+		}
+		var respData struct{}
+		resp.WriteData(req, respData)
+		return nil
+	}, append(opt.middleware, opt.middlewareUpload...)...)
 }

@@ -11,6 +11,7 @@ func NewLogMiddleware() *Plugin {
 	return NewPlugin(Config{
 		Name:           "log-middleware",
 		MiddlewareName: "Log",
+		Annotation:     "log",
 		Fields: []jen.Code{
 			jen.Id("logger"),
 			jen.Qual(gomosaic.SpanPkg, "Logger"),
@@ -42,6 +43,7 @@ func NewMetricMiddleware() *Plugin {
 	return NewPlugin(Config{
 		Name:           "metric-middleware",
 		MiddlewareName: "Metric",
+		Annotation:     "metric",
 		Fields: []jen.Code{
 			jen.Id("collector"),
 			jen.Qual(gomosaic.SpanPkg, "MetricsCollector"),

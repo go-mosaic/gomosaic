@@ -198,7 +198,7 @@ func (g *generator) buildResponseData(methodOpt *annotation.MethodOpt) jen.Code 
 	innerStruct := annotation.MakeStructFieldsFromResults(methodOpt.BodyResults, g.qual)
 	innerValue := jen.DictFunc(func(d jen.Dict) {
 		for _, r := range methodOpt.BodyResults {
-			d[jen.Id(strcase.ToCamel(r.Var.Name))] = jen.Id("serverResponse")
+			d[jen.Id(annotation.ResultFieldName(r))] = jen.Id("serverResponse")
 		}
 	})
 

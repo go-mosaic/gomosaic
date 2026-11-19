@@ -24,6 +24,7 @@ func TestMiddlewarePlugin_Golden(t *testing.T) {
 			config: Config{
 				Name:           "log-middleware",
 				MiddlewareName: "Log",
+				Annotation:     "log",
 				Fields: []jen.Code{
 					jen.Id("logger"),
 					jen.Qual(gomosaic.SpanPkg, "Logger"),
@@ -57,6 +58,7 @@ func TestMiddlewarePlugin_Golden(t *testing.T) {
 			config: Config{
 				Name:           "metric-middleware",
 				MiddlewareName: "Metric",
+				Annotation:     "metric",
 				Fields: []jen.Code{
 					jen.Id("collector"),
 					jen.Qual(gomosaic.SpanPkg, "MetricsCollector"),

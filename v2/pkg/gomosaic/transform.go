@@ -100,6 +100,13 @@ type Transform struct {
 	qualFn            QualFunc
 	errorStatements   []jen.Code
 	registry          *TransformRegistry
+	timeFormat        string
+}
+
+// SetTimeFormat задаёт layout для форматирования и разбора time.Time.
+func (tr *Transform) SetTimeFormat(format string) *Transform {
+	tr.timeFormat = format
+	return tr
 }
 
 // SetAssignID устанавливает идентификатор для присваивания.
@@ -149,6 +156,16 @@ func (tr *Transform) Format() jen.Code {
 }
 
 func (tr *Transform) parse(typeInfo *TypeInfo) jen.Code {
+	if tr.timeFormat != "" && IsTime(typeInfo) {
+		code := jen.Do(tr.qualFn(runtimePkg, "ParseTime")).Call(
+			jen.Lit(tr.timeFormat),
+			tr.valueID,
+			jen.Op("&").Add(tr.assignID),
+		)
+
+		return jen.If(jen.Err().Op(":=").Add(code), jen.Err().Op("!=").Nil()).Block(tr.errorStatements...)
+	}
+
 	for _, pf := range tr.registry.parseFactories {
 		if pf.support(typeInfo) {
 			return pf.factory().Parse(tr.valueID, tr.assignID, tr.typeInfo, tr.errorStatements, tr.qualFn)
@@ -172,6 +189,10 @@ func (tr *Transform) parse(typeInfo *TypeInfo) jen.Code {
 }
 
 func (tr *Transform) format(typeInfo *TypeInfo) jen.Code {
+	if tr.timeFormat != "" && IsTime(typeInfo) {
+		return jen.Add(tr.valueID).Dot("Format").Call(jen.Lit(tr.timeFormat))
+	}
+
 	for _, ff := range tr.registry.formatFactories {
 		if ff.support(typeInfo) {
 			return ff.factory().Format(tr.valueID, tr.typeInfo, tr.qualFn)

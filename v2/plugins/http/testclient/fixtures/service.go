@@ -15,6 +15,7 @@ type CreateUserRequest struct {
 }
 
 // @gomosaic
+// @http-client-enable
 type UserService interface {
 	// @http-method GET
 	// @http-path /users

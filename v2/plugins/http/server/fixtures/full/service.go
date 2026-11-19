@@ -1,6 +1,9 @@
 package service
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type User struct {
 	Name  string
@@ -41,7 +44,7 @@ type UserService interface {
 
 	// @http-method POST
 	// @http-path /user
-	// @http-wrap-req data
+	// @http-wrap-req-path data
 	// @http-single req
 	// @http-default content-type=application/json
 	CreateUser(ctx context.Context,
@@ -72,10 +75,21 @@ type UserService interface {
 		// @http-type query
 		// @http-name limit_val
 		limit int,
+		// @http-type query
+		since time.Time,
 		// @http-type header
 		// @http-name X-Offset
 		offset int,
 	) (users []User, total int, err error)
+
+	// @http-method GET
+	// @http-path /profile
+	GetProfile(ctx context.Context) (
+		// @http-flat
+		user *User,
+		total int,
+		err error,
+	)
 
 	// @http-method GET
 	// @http-path /users/search
@@ -83,4 +97,25 @@ type UserService interface {
 		// @http-type query
 		params SearchParams,
 	) (users []User, err error)
+
+	// @http-method POST
+	// @http-path /form
+	// @http-use url-encoded
+	// @http-time-format 2006-01-02
+	// @http-form-max-memory 1024
+	SubmitForm(ctx context.Context,
+		// @http-type body
+		name string,
+		// @http-type body
+		since time.Time,
+	) (err error)
+
+	// @http-method POST
+	// @http-path /upload
+	// @http-use multipart
+	// @http-form-max-memory 2048
+	Upload(ctx context.Context,
+		// @http-type body
+		filename string,
+	) (err error)
 }

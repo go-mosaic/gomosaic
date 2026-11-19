@@ -154,20 +154,20 @@ func (b *boolTypeParse) Format(valueID jen.Code, typeInfo *TypeInfo, qualFn Qual
 }
 
 func (t *timeTypeParse) Support(typeInfo *TypeInfo) bool {
-	return typeInfo.Package == "time"
+	return typeInfo.Package == timePkg
 }
 
 func (t *timeTypeParse) Parse(valueID, assignID jen.Code, typeInfo *TypeInfo, errorStatements []jen.Code, qualFn QualFunc) jen.Code {
 	var code jen.Code
 
 	switch typeInfo.Name {
-	case "Time":
+	case timeTypeName:
 		code = jen.Do(qualFn(runtimePkg, "ParseTime")).Call(
 			jen.Do(qualFn("time", "RFC3339")),
 			valueID,
 			jen.Op("&").Add(assignID),
 		)
-	case "Duration":
+	case durationTypeName:
 		code = jen.Do(qualFn(runtimePkg, "ParseDuration")).Call(
 			valueID,
 			jen.Op("&").Add(assignID),

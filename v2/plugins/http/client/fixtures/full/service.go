@@ -1,6 +1,9 @@
 package service
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 type User struct {
 	Name  string
@@ -32,6 +35,8 @@ type Filter struct {
 type UserService interface {
 	// @http-method GET
 	// @http-path /users
+	// @http-default accept=application/vnd.api+json
+	// @http-default content-type=application/vnd.api+json
 	ListUsers(ctx context.Context) (users []User, err error)
 
 	// @http-method GET
@@ -45,9 +50,9 @@ type UserService interface {
 
 	// @http-method POST
 	// @http-path /user
-	// @http-wrap-req data
+	// @http-wrap-req-path data
 	// @http-single req
-	// @http-default content-type=application/json
+	// @http-default content-type=application/vnd.api+json
 	CreateUser(ctx context.Context,
 		// @http-type body
 		// @http-name user_req format=snake
@@ -76,10 +81,21 @@ type UserService interface {
 		// @http-type query
 		// @http-name limit_val
 		limit int,
+		// @http-type query
+		since time.Time,
 		// @http-type header
 		// @http-name X-Offset
 		offset int,
 	) (users []User, total int, err error)
+
+	// @http-method GET
+	// @http-path /profile
+	GetProfile(ctx context.Context) (
+		// @http-flat
+		user *User,
+		total int,
+		err error,
+	)
 
 	// @http-method POST
 	// @http-path /internal/notify

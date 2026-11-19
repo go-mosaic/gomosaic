@@ -129,8 +129,8 @@ type MethodResultOpt struct {
 	Name     string
 	NameOpt  MethodParamNameOpt `option:"name,inline"`
 	HTTPType string             `option:"type"`
-	Required bool               `option:"required"`
-	Flat     bool               `option:"flat"`
+	Required bool               `option:"required,asFlag"`
+	Flat     bool               `option:"flat,asFlag"`
 }
 
 // Load загружает HTTP-аннотации из типов.

@@ -26,6 +26,10 @@ func (g *generator) Generate(ifaceOpts []*annotation.IfaceOpt, configs []Config)
 	)
 
 	for _, ifaceOpt := range ifaceOpts {
+		if !ifaceOpt.ClientEnable {
+			continue
+		}
+
 		for _, methodOpt := range ifaceOpt.Methods {
 			if methodOpt.ClientSkip {
 				continue

@@ -3,6 +3,7 @@ package basic
 import "context"
 
 // @gomosaic
+// @http-client-enable
 type UserService interface {
 	// @http-method GET
 	// @http-path /user/{id}

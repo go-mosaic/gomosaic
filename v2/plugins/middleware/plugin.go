@@ -58,6 +58,9 @@ type Config struct {
 	// используется для имён структур и конструкторов.
 	MiddlewareName string
 
+	// Annotation префикс аннотаций пропуска методов (например, "log", "metric").
+	Annotation string
+
 	// Fields дополнительные поля структуры middleware (пары имя-тип).
 	Fields []jen.Code
 
@@ -112,12 +115,14 @@ func (p *Plugin) Generate(
 		}
 
 		for _, m := range service.Type.Interface.Methods {
+			skip := p.cfg.Annotation != "" && m.Annotations.Has(p.cfg.Annotation+"-skip")
+
 			g.GenerateMethod(m, func(group *jen.Group, mi *gomosaic.MethodInfo) {
-				if p.cfg.BeforeFn != nil {
+				if !skip && p.cfg.BeforeFn != nil {
 					p.cfg.BeforeFn(group, mi)
 				}
 			}, func(group *jen.Group, mi *gomosaic.MethodInfo) {
-				if p.cfg.AfterFn != nil {
+				if !skip && p.cfg.AfterFn != nil {
 					p.cfg.AfterFn(group, mi)
 				}
 			})

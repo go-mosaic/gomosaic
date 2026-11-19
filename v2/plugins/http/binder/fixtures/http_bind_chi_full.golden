@@ -13,7 +13,7 @@ import (
 )
 
 func (p *full.PostsRequest) Bind(r *http.Request) error {
-	if err := r.ParseMultipartForm(int64(33554432)); err != nil {
+	if err := r.ParseMultipartForm(int64(1048576)); err != nil {
 		return err
 	}
 	if r.URL.Query().Get("Tag") == "" {
