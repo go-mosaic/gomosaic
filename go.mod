@@ -1,8 +1,6 @@
 module github.com/go-mosaic/gomosaic
 
-go 1.24
-
-toolchain go1.24.1
+go 1.27
 
 require (
 	github.com/Oudwins/tailwind-merge-go v0.2.1
